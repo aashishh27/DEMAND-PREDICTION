@@ -1,0 +1,20 @@
+Model Optimization & Explainable AI (XAI) Summary
+
+- Models Trained:
+  1. Random Forest Regressor
+  2. XGBoost Regressor
+
+- Hyperparameter Tuning Results:
+  • Random Forest: best n_estimators=100, max_depth=None
+  • XGBoost: best learning_rate=0.1, n_estimators=100
+
+- Performance (RMSE):
+  – Random Forest: CV=1.775, Test=2.301
+  – XGBoost: CV=2.080, Test=2.613
+
+- SHAP Insights:
+  • Top drivers: roll_7, roll_14, roll_30, daily_pickups
+  • Negative impact: new_client_flag
+
+- Partial Dependence:
+  • Visualized for the feature with highest mean absolute SHAP value.
