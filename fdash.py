@@ -47,9 +47,11 @@ def forecast(model, df, horizon):
     })
 
 @st.cache_resource
-def get_tree_explainer(mdl):
-    # Use TreeExplainer for RandomForest
-    return shap.TreeExplainer(mdl)
+def init_shap(model, df):
+    X = df.select_dtypes(np.number)
+    # Option A: use TreeExplainer for tree‑based models
+    explainer = shap.TreeExplainer(model)
+    return explainer.shap_values(X)
 
 @st.cache_resource
 def init_rag(chroma_dir="chroma_db"):
