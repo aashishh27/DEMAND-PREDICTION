@@ -17,9 +17,9 @@ def load_assets():
 
 df, model = load_assets()
 
-# 2) Forecast function (cached)
+# 2) Forecast function (cached) — note the leading underscore on `model`
 @st.cache_data(show_spinner=False)
-def forecast_2025(df, model):
+def forecast_2025(df, _model):
     results = []
     static = (
         df.groupby("region")
@@ -50,16 +50,20 @@ def forecast_2025(df, model):
             }
             feat.update(static[static.region == reg].iloc[0].to_dict())
 
-            Xp = pd.DataFrame([feat])[model.feature_names_in_]
-            pred = model.predict(Xp)[0]
+            Xp = pd.DataFrame([feat])[_model.feature_names_in_]
+            pred = _model.predict(Xp)[0]
 
-            results.append({"pickup_date": date, "region": reg, "predicted_pickups": pred})
+            results.append({
+                "pickup_date": date,
+                "region": reg,
+                "predicted_pickups": pred
+            })
             daily.at[date] = pred
 
     return pd.DataFrame(results)
 
 # 3) Streamlit UI
-st.title("🔮 2025 Forecast with Trend & Map")
+st.title("🔮 2025 Forecast with Trend, Map & Filters")
 
 # Sidebar filters
 st.sidebar.header("Filters")
@@ -80,12 +84,12 @@ if st.button("Run 2025 Forecast"):
     st.success("Forecast complete!")
 
     # Apply filters
-    filt = (
+    mask = (
         preds_2025["region"].isin(selected_regions) &
         (preds_2025["pickup_date"] >= pd.to_datetime(start_date)) &
         (preds_2025["pickup_date"] <= pd.to_datetime(end_date))
     )
-    filtered = preds_2025[filt]
+    filtered = preds_2025[mask]
 
     # --- Trend line chart: total daily pickups ---
     daily_totals = (
