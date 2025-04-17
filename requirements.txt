@@ -5,8 +5,10 @@ pydeck
 plotly
 shap
 matplotlib
-scikit-learn
+scikit‑learn
 ortools
 langchain
+langchain‑community
 chromadb
 openai
+
