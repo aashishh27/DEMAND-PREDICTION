@@ -9,6 +9,6 @@ scikit-learn
 ortools
 langchain
 langchain-community
-chromadb
 openai
-
+chromadb==1.0.5
+duckdb
