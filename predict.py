@@ -1,0 +1,119 @@
+# streamlit_app.py
+import streamlit as st
+import pandas as pd
+import joblib
+
+# 1) Load & cache data + model
+@st.cache_data
+def load_assets():
+    df = pd.read_csv(
+        "region_client_df.csv",
+        parse_dates=["pickup_date", "first_visit_date"]
+    )
+    df = df.sort_values(["region", "pickup_date"]).reset_index(drop=True)
+    model = joblib.load("optimized_random_forest.joblib")
+    return df, model
+
+df, model = load_assets()
+
+# 2) Forecast function (cached)
+@st.cache_data(show_spinner=False)
+def forecast_2025(df, model):
+    results = []
+    static = (
+        df.groupby("region")
+          [["latitude", "longitude", "dist_to_hub_km", "fsa_cluster"]]
+          .first()
+          .reset_index()
+    )
+
+    for reg in df.region.unique():
+        hist = df[df.region == reg]
+        daily = hist.set_index("pickup_date")["daily_pickups"].astype(float).copy()
+        future = pd.date_range(daily.index.max() + pd.Timedelta(1), "2025-12-31", freq="D")
+
+        for date in future:
+            lag_1 = daily.get(date - pd.Timedelta(1), 0.0)
+            win7  = daily.loc[date - pd.Timedelta(7):date - pd.Timedelta(1)].mean()
+            win14 = daily.loc[date - pd.Timedelta(14):date - pd.Timedelta(1)].mean()
+            win30 = daily.loc[date - pd.Timedelta(30):date - pd.Timedelta(1)].mean()
+            days_since = (date - hist.first_visit_date.min()).days
+
+            feat = {
+                "lag_1": lag_1,
+                "daily_pickups": lag_1,
+                "rolling_7d": win7,
+                "rolling_14d": win14,
+                "rolling_30d": win30,
+                "days_since_first_visit": days_since
+            }
+            feat.update(static[static.region == reg].iloc[0].to_dict())
+
+            Xp = pd.DataFrame([feat])[model.feature_names_in_]
+            pred = model.predict(Xp)[0]
+
+            results.append({"pickup_date": date, "region": reg, "predicted_pickups": pred})
+            daily.at[date] = pred
+
+    return pd.DataFrame(results)
+
+# 3) Streamlit UI
+st.title("🔮 2025 Forecast with Trend & Map")
+
+if st.button("Run 2025 Forecast"):
+    with st.spinner("Generating forecasts…"):
+        preds_2025 = forecast_2025(df, model)
+    st.success("Forecast complete!")
+
+    # --- Trend line chart: total daily pickups ---
+    daily_totals = (
+        preds_2025
+        .groupby("pickup_date")["predicted_pickups"]
+        .sum()
+        .rename("Total Pickups")
+        .reset_index()
+        .set_index("pickup_date")
+    )
+    st.subheader("📈 Daily Total Pickups for 2025")
+    st.line_chart(daily_totals)
+
+    # --- Map: total 2025 pickups by region centroid ---
+    centroids = (
+        preds_2025
+        .groupby("region")
+        .agg({
+            "latitude": "first",
+            "longitude": "first",
+            "predicted_pickups": "sum"
+        })
+        .reset_index()
+    )
+    centroids = centroids.rename(columns={
+        "latitude": "lat",
+        "longitude": "lon",
+        "predicted_pickups": "total_2025_pickups"
+    })
+
+    st.subheader("🗺️ Map of Total 2025 Pickups by Region")
+    # st.map will size all points equally; to show magnitude, we can use pydeck:
+    import pydeck as pdk
+    deck = pdk.Deck(
+        map_style="mapbox://styles/mapbox/light-v9",
+        initial_view_state=pdk.ViewState(
+            latitude=centroids.lat.mean(),
+            longitude=centroids.lon.mean(),
+            zoom=10
+        ),
+        layers=[
+            pdk.Layer(
+                "ColumnLayer",
+                data=centroids,
+                get_position=["lon", "lat"],
+                get_elevation="total_2025_pickups",
+                elevation_scale=0.1,
+                radius=500,
+                get_fill_color="[255 - total_2025_pickups * 0.02, 100, total_2025_pickups * 0.02, 160]"
+            )
+        ]
+    )
+    st.pydeck_chart(deck)
