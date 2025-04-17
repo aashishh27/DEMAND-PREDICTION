@@ -1,22 +1,25 @@
 import os
+import glob
+import pickle
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle
 import pydeck as pdk
 import plotly.express as px
 import plotly.graph_objects as go
 import shap
 import matplotlib.pyplot as plt
+
 from sklearn.inspection import PartialDependenceDisplay
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
-
-# LangChain RAG imports
+# LangChain FAISS imports (no sqlite required)
 from langchain_community.embeddings import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_community.chat_models import ChatOpenAI
+from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
+from langchain.schema import Document
 
 st.set_page_config(page_title="🌐 Geospatial Demand Prediction Studio", layout="wide")
 
@@ -33,26 +36,11 @@ def load_model(path="optimized_random_forest.pkl"):
 
 @st.cache_resource
 def get_shap_explainer(model, X_ref):
-    """
-    Try to use TreeExplainer; if it fails (e.g. model isn’t a tree),
-    fall back to KernelExplainer using X_ref (numeric features) as background.
-    """
     try:
         return shap.TreeExplainer(model)
     except Exception:
-        # shap.utils.sample works to grab a subset for KernelExplainer
         bg = shap.utils.sample(X_ref, min(len(X_ref), 100), random_state=0)
         return shap.KernelExplainer(model.predict, bg)
-        
-@st.cache_resource
-def init_rag(chroma_dir="chroma_db"):
-    if not os.getenv("OPENAI_API_KEY"):
-        st.error("⚠️ Please set OPENAI_API_KEY")
-        st.stop()
-    embeddings = OpenAIEmbeddings()
-    vs = Chroma(persist_directory=chroma_dir, embedding_function=embeddings)
-    llm = ChatOpenAI(temperature=0)
-    return RetrievalQA.from_chain_type(llm, chain_type="stuff", retriever=vs.as_retriever())
 
 @st.cache_data
 def prepare_daily_hist(df):
@@ -66,10 +54,8 @@ def make_features(daily, df_full, windows=(7,14,30)):
     out = daily.copy()
     out["dow"]   = out.pickup_date.dt.weekday
     out["month"] = out.pickup_date.dt.month
-    # static: median dependents per region
     med_dep = df_full.groupby("region")["dependents_qty"].median().rename("med_dep")
     out = out.merge(med_dep, on="region", how="left")
-    # lags & rolling
     out["lag_1"] = out.groupby("region")["quantity"].shift(1).fillna(0)
     for w in windows:
         out[f"roll_{w}"] = (
@@ -89,37 +75,64 @@ def generate_2025(df, model):
     future["quantity"] = np.nan
     all_days = pd.concat([hist,future],ignore_index=True)
     all_days = make_features(all_days, df)
-    Xf = all_days.loc[all_days.pickup_date > last].drop("quantity",1)
+    Xf = all_days.loc[all_days.pickup_date > last].drop("quantity", axis=1)
     Xf = Xf[model.feature_names_in_]
     all_days.loc[all_days.pickup_date > last, "predicted_qty"] = model.predict(Xf)
     return all_days
 
-# ─── Load ───────────────────────────────────────────────────────────────────────
-df        = load_data()
-model     = load_model()
-qa_chain  = init_rag()
+# ─── RAG / Chatbot via FAISS ─────────────────────────────────────────────────────
+@st.cache_data
+def load_knowledge_base(path_pattern="knowledge/*.txt"):
+    docs = []
+    for fname in glob.glob(path_pattern):
+        with open(fname, "r", encoding="utf-8") as f:
+            text = f.read()
+        docs.append(Document(page_content=text, metadata={"source": fname}))
+    return docs
+
+@st.cache_resource
+def init_rag_faiss(docs, index_path="faiss_index.pkl"):
+    embeddings = OpenAIEmbeddings()
+    if os.path.exists(index_path):
+        vs = FAISS.load(index_path, embeddings)
+    else:
+        vs = FAISS.from_documents(docs, embeddings)
+        vs.save(index_path)
+    llm = ChatOpenAI(temperature=0)
+    return RetrievalQA.from_chain_type(
+        llm, chain_type="stuff", retriever=vs.as_retriever()
+    )
+
+# ─── Load data, model, RAG ───────────────────────────────────────────────────────
+df       = load_data()
+model    = load_model()
+docs     = load_knowledge_base()       # ensure you have .txt files in ./knowledge/
+qa_chain = init_rag_faiss(docs)
 
 # ─── Sidebar ────────────────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
 min_dt, max_dt = df.pickup_date.min(), df.pickup_date.max()
 start_dt, end_dt = st.sidebar.date_input(
-    "History Range",[min_dt,max_dt],
-    min_value=min_dt,max_value=max_dt
+    "History Range", [min_dt, max_dt],
+    min_value=min_dt, max_value=max_dt
 )
 start_dt, end_dt = pd.to_datetime(start_dt), pd.to_datetime(end_dt)
+
 regions = sorted(df.region.unique())
 sel_regs = st.sidebar.multiselect("Regions", regions, default=regions)
+
 dep_min, dep_max = int(df.dependents_qty.min()), int(df.dependents_qty.max())
-sel_dep = st.sidebar.slider("Dependents",dep_min,dep_max,(dep_min,dep_max))
-house_map = {0.0:"Single",1.0:"Multi"}
+sel_dep = st.sidebar.slider("Dependents", dep_min, dep_max, (dep_min, dep_max))
+
+house_map = {0.0: "Single", 1.0: "Multi"}
 sel_hh = st.sidebar.multiselect(
-    "Household",[house_map[x] for x in sorted(df.household.unique())],
+    "Household", [house_map[x] for x in sorted(df.household.unique())],
     default=[house_map[x] for x in sorted(df.household.unique())]
 )
 sel_codes = [k for k,v in house_map.items() if v in sel_hh]
-# filter history
+
 mask = (
-    df.pickup_date.between(start_dt,end_dt) &
+    df.pickup_date.between(start_dt, end_dt) &
     df.region.isin(sel_regs) &
     df.dependents_qty.between(*sel_dep) &
     df.household.isin(sel_codes)
@@ -128,9 +141,8 @@ hist_filt = df[mask]
 
 # ─── Compute SHAP ───────────────────────────────────────────────────────────────
 X_num     = hist_filt.select_dtypes(include=[np.number])
-explainer = get_shap_explainer(model, X_num)      
+explainer = get_shap_explainer(model, X_num)
 shap_vals = explainer.shap_values(X_num)
-
 
 # ─── Build Tabs ―────────────────────────────────────────────────────────────────
 tabs = st.tabs([
@@ -139,19 +151,18 @@ tabs = st.tabs([
     "XAI","Geospatial (History)","Optimization","Chatbot"
 ])
 
-# ── Tab 1: 2025 Forecast & Map ─────────────────────────────────────────────────
+# ── Tab 1: 2025 Forecast & Map ───────────────────────────────────────────────────
 with tabs[0]:
     st.header("📅 2025 Demand Predictions by Region")
     all_days = generate_2025(df, model)
     preds = all_days.query("pickup_date.dt.year==2025 & region in @sel_regs")
-    # time series
     fig_ts = px.line(
         preds, x="pickup_date", y="predicted_qty", color="region",
         title="Daily Predicted Quantity (2025)"
     )
     fig_ts.update_layout(xaxis_title="Date", yaxis_title="Predicted Demand")
     st.plotly_chart(fig_ts, use_container_width=True)
-    # geospatial clusters: total 2025 per region
+
     agg = (
         preds.groupby("region")
              .agg({"predicted_qty":"sum","latitude":"mean","longitude":"mean"})
@@ -264,14 +275,13 @@ with tabs[6]:
 # ── Tab 8: Chatbot ──────────────────────────────────────────────────────────────
 with tabs[7]:
     st.header("💬 Ask the Data")
-    q = st.text_input("Enter a question…")
-    if q:
-        res = qa_chain.run(q)
-        if isinstance(res, dict):
-            st.markdown(f"**Answer:** {res['result']}")
-            for d in res.get("source_documents",[]):
-                with st.expander(f"Source: {d.metadata.get('source','')}"):
-                    st.write(d.page_content)
+    query = st.text_input("Enter a question…")
+    if query:
+        result = qa_chain.run(query)
+        if isinstance(result, dict):
+            st.markdown(f"**Answer:** {result['result']}")
+            for doc in result.get("source_documents", []):
+                with st.expander(f"Source: {doc.metadata.get('source','')}"):
+                    st.write(doc.page_content)
         else:
-            st.markdown(f"**Answer:** {res}")
-
+            st.markdown(f"**Answer:** {result}")
