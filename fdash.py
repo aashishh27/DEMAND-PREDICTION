@@ -92,7 +92,12 @@ def load_knowledge_base(path_pattern="knowledge/*.txt"):
 
 @st.cache_resource
 def init_rag_faiss(index_path="faiss_index.pkl"):
-    embeddings = OpenAIEmbeddings()
+   # supply your OpenAI key to the embeddings constructor
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+       st.warning("⚠️ Chatbot disabled: missing OPENAI_API_KEY")
+       return None
+    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
     docs = load_knowledge_base()
     if os.path.exists(index_path):
         vs = FAISS.load(index_path, embeddings)
