@@ -321,7 +321,7 @@ with tabs[7]:
     elif q:
         st.info("Chatbot is disabled (missing API key).")
 
-            st.markdown(f"**Answer:** {res}")
+        st.markdown(f"**Answer:** {res}")
     elif q:
         st.info("Chatbot is disabled (missing API key).")
 
