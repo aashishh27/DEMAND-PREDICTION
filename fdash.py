@@ -69,11 +69,11 @@ def generate_2025(df, model):
     last = hist.pickup_date.max()
     future = pd.MultiIndex.from_product(
         [hist.region.unique(),
-         pd.date_range(last+pd.Timedelta(days=1),"2025-12-31",freq="D")],
+         pd.date_range(last+pd.Timedelta(days=1), "2025-12-31", freq="D")],
         names=["region","pickup_date"]
     ).to_frame(index=False)
     future["quantity"] = np.nan
-    all_days = pd.concat([hist,future],ignore_index=True)
+    all_days = pd.concat([hist,future], ignore_index=True)
     all_days = make_features(all_days, df)
     Xf = all_days.loc[all_days.pickup_date > last].drop("quantity", axis=1)
     Xf = Xf[model.feature_names_in_]
@@ -91,8 +91,9 @@ def load_knowledge_base(path_pattern="knowledge/*.txt"):
     return docs
 
 @st.cache_resource
-def init_rag_faiss(docs, index_path="faiss_index.pkl"):
+def init_rag_faiss(index_path="faiss_index.pkl"):
     embeddings = OpenAIEmbeddings()
+    docs = load_knowledge_base()
     if os.path.exists(index_path):
         vs = FAISS.load(index_path, embeddings)
     else:
@@ -103,11 +104,11 @@ def init_rag_faiss(docs, index_path="faiss_index.pkl"):
         llm, chain_type="stuff", retriever=vs.as_retriever()
     )
 
-# ─── Load data, model, RAG ───────────────────────────────────────────────────────
+# ─── Load data, model, RAG ―────────────────────────────────────────────────────
+
 df       = load_data()
 model    = load_model()
-docs     = load_knowledge_base()       # ensure you have .txt files in ./knowledge/
-qa_chain = init_rag_faiss(docs)
+qa_chain = init_rag_faiss()
 
 # ─── Sidebar ────────────────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
@@ -129,7 +130,7 @@ sel_hh = st.sidebar.multiselect(
     "Household", [house_map[x] for x in sorted(df.household.unique())],
     default=[house_map[x] for x in sorted(df.household.unique())]
 )
-sel_codes = [k for k,v in house_map.items() if v in sel_hh]
+sel_codes = [k for k, v in house_map.items() if v in sel_hh]
 
 mask = (
     df.pickup_date.between(start_dt, end_dt) &
@@ -151,7 +152,7 @@ tabs = st.tabs([
     "XAI","Geospatial (History)","Optimization","Chatbot"
 ])
 
-# ── Tab 1: 2025 Forecast & Map ───────────────────────────────────────────────────
+# ── Tab 1: 2025 Forecast & Map ───────────────────────────────────────────────────
 with tabs[0]:
     st.header("📅 2025 Demand Predictions by Region")
     all_days = generate_2025(df, model)
