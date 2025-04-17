@@ -34,7 +34,7 @@ def load_model(path="optimized_random_forest.pkl"):
 @st.cache_data
 def prepare_daily_hist(df):
     return (
-        df.groupby(["region","pickup_date"])["quantity"]
+        df.groupby(["region","pickup_date"])["daily_pickups"]
           .sum().reset_index()
           .sort_values(["region","pickup_date"])
     )
@@ -45,10 +45,10 @@ def make_features(daily, df_full, windows=(7,14,30)):
     out["month"] = out.pickup_date.dt.month
     med_dep = df_full.groupby("region")["dependents_qty"].median().rename("med_dep")
     out = out.merge(med_dep, on="region", how="left")
-    out["lag_1"] = out.groupby("region")["quantity"].shift(1).fillna(0)
+    out["lag_1"] = out.groupby("region")["daily_pickups"].shift(1).fillna(0)
     for w in windows:
         out[f"roll_{w}"] = (
-            out.groupby("region")["quantity"]
+            out.groupby("region")["daily_pickups"]
                .transform(lambda x: x.shift(1).rolling(w,1).mean())
         )
     return out
@@ -62,12 +62,12 @@ def generate_2025(df, model):
                        "2025-12-31",freq="D")],
         names=["region","pickup_date"]
     ).to_frame(index=False)
-    future["quantity"] = np.nan
+    future["daily_pickups"] = np.nan
     all_days = pd.concat([hist,future], ignore_index=True)
     all_days = make_features(all_days, df)
-    Xf = all_days.loc[all_days.pickup_date > last].drop("quantity", axis=1)
+    Xf = all_days.loc[all_days.pickup_date > last].drop("daily_pickups", axis=1)
     Xf = Xf[model.feature_names_in_]
-    all_days.loc[all_days.pickup_date > last, "predicted_qty"] = model.predict(Xf)
+    all_days.loc[all_days.pickup_date > last, "predicted_daily"] = model.predict(Xf)
     return all_days
 
 # ─── RAG / Chatbot via FAISS ─────────────────────────────────────────────────────
@@ -143,48 +143,50 @@ with tabs[0]:
     all_days = generate_2025(df, model)
     preds    = all_days.query("pickup_date.dt.year==2025 & region in @sel_regs")
 
-    # Time series chart
+    # Time series
     fig_ts = px.line(
-        preds, x="pickup_date", y="predicted_qty", color="region",
+        preds, x="pickup_date", y="predicted_daily", color="region",
         title="Daily Predicted Quantity (2025)"
     )
     fig_ts.update_layout(xaxis_title="Date", yaxis_title="Predicted Demand")
     st.plotly_chart(fig_ts, use_container_width=True)
 
-    # Geospatial map with hex + red bubbles
+    # Geospatial clusters
     agg = (preds.groupby("region")
-                .agg({"predicted_qty":"sum","latitude":"mean","longitude":"mean"})
-                .reset_index())
+                .agg({"predicted_daily":"sum"})
+                .reset_index()
+                .merge(df.groupby("region")[["latitude","longitude"]].mean().reset_index(),
+                       on="region"))
     st.subheader("🔍 Aggregate 2025 Demand Clusters")
 
     view = pdk.ViewState(latitude=53.5461, longitude=-113.4938, zoom=10, pitch=45)
     hex_layer = pdk.Layer(
         "HexagonLayer", data=agg,
         get_position="[longitude, latitude]",
-        get_elevation="predicted_qty",
-        elevation_scale=0.01, radius=1000, pickable=True
+        get_elevation="predicted_daily", elevation_scale=0.01,
+        radius=1000, pickable=True
     )
     scatter_2025 = pdk.Layer(
         "ScatterplotLayer", data=agg,
         get_position="[longitude, latitude]",
-        get_radius="predicted_qty * 0.005",
+        get_radius="predicted_daily * 0.005",
         get_fill_color="[255, 0, 0, 180]", pickable=True
     )
     st.pydeck_chart(pdk.Deck(
         layers=[hex_layer, scatter_2025],
         initial_view_state=view,
-        tooltip={"text":"Region: {region}\nTotal 2025 Demand: {predicted_qty:.0f}"}
+        tooltip={"text":"Region: {region}\nTotal 2025 Demand: {predicted_daily:.0f}"}
     ))
 
 # ── Tab 1: Overview & KPIs ───────────────────────────────────────────────────────
 with tabs[1]:
     st.header("📦 Historical Overview & KPIs")
-    total   = int(hist_filt.quantity.sum())
+    total   = int(hist_filt.daily_pickups.sum())
     days    = (end_dt - start_dt).days + 1
-    prev    = hist_filt.assign(prev=hist_filt.quantity).loc[
+    prev    = hist_filt.assign(prev=hist_filt.daily_pickups).loc[
                  hist_filt.pickup_date.between(
-                   start_dt-pd.Timedelta(days=days),
-                   start_dt-pd.Timedelta(days=1)
+                     start_dt-pd.Timedelta(days=days),
+                     start_dt-pd.Timedelta(days=1)
                  )
              ]
     prev_tot = int(prev.prev.sum())
@@ -197,7 +199,8 @@ with tabs[1]:
 # ── Tab 2: Features ─────────────────────────────────────────────────────────────
 with tabs[2]:
     st.header("🛠️ Feature Importance (History)")
-    imp = pd.Series(model.feature_importances_, index=hist_filt.select_dtypes(include=np.number).columns)
+    imp = pd.Series(model.feature_importances_,
+                    index=hist_filt.select_dtypes(include=np.number).columns)
     imp = imp.sort_values(ascending=False).head(10).reset_index()
     imp.columns = ["Feature","Importance"]
     st.bar_chart(imp.set_index("Feature"))
@@ -211,16 +214,12 @@ with tabs[3]:
     }, index=["CV RMSE","Test RMSE"])
 
     st.subheader("📊 RMSE Comparison")
-    fig_bar = px.bar(
-        comp, barmode="group",
-        title="Cross‑Validation vs Test RMSE"
-    )
+    fig_bar = px.bar(comp, barmode="group", title="Cross‑Validation vs Test RMSE")
     fig_bar.update_layout(xaxis_title="Metric", yaxis_title="RMSE")
     st.plotly_chart(fig_bar, use_container_width=True)
 
     st.subheader("📈 RMSE Heatmap")
-    fig_heat = px.imshow(comp, text_auto=True, aspect="auto",
-                         title="RMSE Heatmap")
+    fig_heat = px.imshow(comp, text_auto=True, aspect="auto", title="RMSE Heatmap")
     st.plotly_chart(fig_heat, use_container_width=True)
 
     st.subheader("📋 RMSE Table")
@@ -229,7 +228,7 @@ with tabs[3]:
 # ── Tab 4: XAI ────────────────────────────────────────────────────────────────────
 with tabs[4]:
     st.header("🔍 Explainable AI (SHAP)")
-    img_paths = sorted(glob.glob(os.path.join("shap_images", "*.png")))
+    img_paths   = sorted(glob.glob(os.path.join("shap_images", "*.png")))
     caption_map = {
         "shap7.png": "Residuals vs. Fitted Values",
         "shap6.png": "Histogram of Residuals",
@@ -242,11 +241,12 @@ with tabs[4]:
     if img_paths:
         for img in img_paths:
             fname = os.path.basename(img)
-            title = caption_map.get(fname, fname.replace(".png","").replace("_"," ").title())
+            title = caption_map.get(fname,
+                                   fname.replace(".png","").replace("_"," ").title())
             st.subheader(title)
             st.image(img, use_column_width=True)
     else:
-        st.warning("No SHAP images in `shap_images/`. Please add shap1.png…shap7.png.")
+        st.warning("No SHAP images found in `shap_images/`. Please add shap1.png…shap7.png.")
 
 # ── Tab 5: Geospatial (History) ─────────────────────────────────────────────────
 with tabs[5]:
@@ -266,10 +266,10 @@ with tabs[6]:
     cap  = st.number_input("Capacity", 1, 200, 50)
     if st.button("Solve Routes"):
         regs    = hist_filt.groupby("region").agg(
-                    quantity="sum", latitude="mean", longitude="mean"
+                    pickups="daily_pickups", latitude="mean", longitude="mean"
                  ).reset_index()
         coords  = list(zip(regs.latitude, regs.longitude))
-        demands = regs.quantity.astype(int).tolist()
+        demands = regs.pickups.astype(int).tolist()
         depot   = (53.5461, -113.4938)
         locs    = [depot] + coords
         dist    = [
@@ -285,8 +285,7 @@ with tabs[6]:
         rt.AddDimensionWithVehicleCapacity(
             rt.RegisterUnaryTransitCallback(
                 lambda idx: demands[mgr.IndexToNode(idx)]
-            ),
-            0, [cap]*nveh, True, "Capacity"
+            ), 0, [cap]*nveh, True, "Capacity"
         )
         rt.SetGuessPolicy(routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
         sol = rt.Solve()
@@ -318,6 +317,10 @@ with tabs[7]:
                 with st.expander(f"Source: {d.metadata.get('source','')}"):
                     st.write(d.page_content)
         else:
+            st.markdown(f"**Answer:** {res}")
+    elif q:
+        st.info("Chatbot is disabled (missing API key).")
+
             st.markdown(f"**Answer:** {res}")
     elif q:
         st.info("Chatbot is disabled (missing API key).")
