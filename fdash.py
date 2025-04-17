@@ -24,7 +24,7 @@ st.set_page_config(page_title="🌐 Geospatial Demand Prediction Studio", layout
 # ─── Helper Functions & Initialization ─────────────────────────────────────────
 
 @st.cache_data
-def load_data(path="region_client_df(1).csv"):
+def load_data(path="region_client_df.csv"):
     df = pd.read_csv(path, parse_dates=["pickup_date"])
     return df
 
