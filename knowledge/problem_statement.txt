@@ -1,0 +1,10 @@
+Geospatial Analysis for Demand Prediction
+
+Goal:
+Predict geographic areas in Edmonton with higher or lower food‑hamper demand to help Islamic Family identify regions for targeted outreach and mobile distribution. By analyzing historical pickup data alongside socio‑economic factors (e.g. dependents per household, region), this project uncovers clusters of rising or declining demand.
+
+Key Points:
+- Data covers daily pickups by region from 2023–2024.
+- Engineered features include lags (1‑day), rolling averages (7/14/30‑day), day‑of‑week, month, and median dependents per region.
+- A Random Forest model is trained to forecast future demand.
+- Dashboard includes EDA, geospatial maps, XAI (SHAP & partial‑dependence), route optimization, and a RAG‑powered chatbot.
