@@ -10,6 +10,7 @@ import shap
 import matplotlib.pyplot as plt
 from sklearn.inspection import PartialDependenceDisplay
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
+from shap.common import InvalidModelError
 
 # LangChain RAG imports
 from langchain_community.embeddings import OpenAIEmbeddings
@@ -31,9 +32,18 @@ def load_model(path="optimized_random_forest.pkl"):
         return pickle.load(f)
 
 @st.cache_resource
-def get_tree_explainer(model):
-    return shap.TreeExplainer(model)
-
+def get_shap_explainer(model, X_ref):
+    """
+    Return a SHAP explainer for `model`.  If it isn’t a supported tree model,
+    fall back to KernelExplainer using X_ref as background data.
+    """
+    try:
+        return shap.TreeExplainer(model)
+    except InvalidModelError:
+        # sample 100 rows (or fewer) from numeric features as background
+        bg = shap.sample(X_ref, min(len(X_ref), 100), random_state=0)
+        return shap.KernelExplainer(model.predict, bg)
+        
 @st.cache_resource
 def init_rag(chroma_dir="chroma_db"):
     if not os.getenv("OPENAI_API_KEY"):
@@ -118,8 +128,11 @@ mask = (
 hist_filt = df[mask]
 
 # ─── Compute SHAP ───────────────────────────────────────────────────────────────
-X_num   = hist_filt.select_dtypes(include=np.number)
+
+X_num    = hist_filt.select_dtypes(include=[np.number])
+explainer = get_shap_explainer(model, X_num)
 shap_vals = explainer.shap_values(X_num)
+
 
 # ─── Build Tabs ―────────────────────────────────────────────────────────────────
 tabs = st.tabs([
