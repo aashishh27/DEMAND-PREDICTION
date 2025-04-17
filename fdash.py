@@ -1,4 +1,5 @@
 # streamlit_demand_prediction_studio.py
+pip install -U langchain‑community
 
 import os
 import streamlit as st
