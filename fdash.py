@@ -35,12 +35,14 @@ def load_model(path="optimized_random_forest.pkl"):
         return pickle.load(f)
 
 @st.cache_resource
+@st.cache_resource
 def get_shap_explainer(model, X_ref):
-    try:
-        return shap.TreeExplainer(model)
-    except Exception:
-        bg = shap.utils.sample(X_ref, min(len(X_ref), 100), random_state=0)
-        return shap.KernelExplainer(model.predict, bg)
+    """
+    Return a unified SHAP Explainer that auto‐selects Tree vs Kernel.
+    """
+    # shap.Explainer will choose TreeExplainer for tree models,
+    # otherwise fall back to the generic kernel method.
+    return shap.Explainer(model, X_ref)
 
 @st.cache_data
 def prepare_daily_hist(df):
@@ -146,9 +148,10 @@ mask = (
 hist_filt = df[mask]
 
 # ─── Compute SHAP ───────────────────────────────────────────────────────────────
-X_num     = hist_filt.select_dtypes(include=[np.number])
-explainer = get_shap_explainer(model, X_num)
-shap_vals = explainer.shap_values(X_num)
+X_num      = hist_filt.select_dtypes(include=[np.number])
+explainer  = get_shap_explainer(model, X_num)
+# run the explainer to get an Explanation object
+shap_exp   = explainer(X_num)
 
 # ─── Build Tabs ―────────────────────────────────────────────────────────────────
 tabs = st.tabs([
@@ -223,10 +226,10 @@ with tabs[4]:
     st.header("🔍 Explainable AI (SHAP)")
     c1,c2 = st.columns(2)
     with c1:
-        shap.summary_plot(shap_vals, X_num, show=False)
+        shap.summary_plot(shap_exp.values, X_num, show=False)
         st.pyplot(plt.gcf())
     with c2:
-        top = X_num.columns[np.argmax(np.abs(shap_vals).mean(0))]
+        top = X_num.columns[np.argmax(np.abs(shap_exp.values).mean(0))]
         fig_pd, ax = plt.subplots()
         PartialDependenceDisplay.from_estimator(model, X_num, [top], ax=ax)
         ax.set_title(f"Partial Dependence: {top}")
