@@ -1,0 +1,21 @@
+Feature Engineering for Geospatial Demand Prediction
+
+1. Lag Features:
+   - lag_1: Previous day's total quantity per region.
+
+2. Rolling Window Features:
+   - roll_7: 7-day rolling average of quantity (excluding current day).
+   - roll_14: 14-day rolling average.
+   - roll_30: 30-day rolling average.
+
+3. Temporal Features:
+   - dow: Day of week (0=Monday…6=Sunday).
+   - month: Month number (1–12).
+
+4. Static Socio-economic Feature:
+   - med_dep: Median dependents per region.
+
+5. Additional Considerations:
+   - revisit patterns (first-timer vs returning).
+   - potential weekend/weekday flags.
+   - interactions between dependents and region.
