@@ -28,8 +28,18 @@ def load_data(path="region_client_df (1).csv"):
 
 @st.cache_resource
 def load_model(path="optimized_random_forest.pkl"):
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    raw = pickle.load(open(path,"rb"))
+    # if it is directly a scikit‑learn model
+    if hasattr(raw, "predict"):
+        return raw
+    # if you pickled a tuple/list that contains the model
+    if isinstance(raw, (list,tuple)):
+        for cand in raw:
+            if hasattr(cand, "predict"):
+                return cand
+    st.error(f"⚠️ Loaded object from {path!r} has no .predict() method. "
+             "Please repickle your sklearn estimator, not an array.")
+    st.stop()
 
 @st.cache_data
 def prepare_daily_hist(df):
