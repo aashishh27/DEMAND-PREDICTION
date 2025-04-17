@@ -44,9 +44,14 @@ def forecast(model, df, horizon):
     })
 
 @st.cache_resource
-def init_shap(model, df):
-    explainer = shap.Explainer(model, df.select_dtypes(np.number))
-    return explainer(df.select_dtypes(np.number))
+def init_shap(model):
+    # For RandomForest / other tree models, use TreeExplainer
+    explainer = shap.TreeExplainer(model)
+    return explainer
+
+explainer = init_shap(model)
+X = df_filt.select_dtypes(np.number)
+shap_vals = explainer.shap_values(X)
 
 def init_rag(chroma_dir="chroma_db"):
     api_key = os.getenv("OPENAI_API_KEY")
@@ -207,16 +212,24 @@ with tabs[4]:
 # ── Tab 6: XAI ──────────────────────────────────────────────────────────────────
 with tabs[5]:
     st.header("🔍 Explainable AI (XAI)")
+    X = df_filt.select_dtypes(np.number)
+    explainer = init_shap(model)
+    shap_vals = explainer.shap_values(X)
+
     c1, c2 = st.columns(2)
     with c1:
-        st_shap = st.pyplot  # or use your st_shap helper
-        shap.summary_plot(shap_vals, df_filt.select_dtypes("number"), show=False)
-        st_shap(plt.gcf())
+        # summary plot
+        shap.summary_plot(shap_vals, X, show=False)
+        st.pyplot(plt.gcf())
+
     with c2:
-        top_feat = feat_imp.index[0]
+        # partial dependence for top feature
+        top_feat = X.columns[np.argmax(np.abs(shap_vals).mean(0))]
         fig_pd, ax = plt.subplots()
         from sklearn.inspection import PartialDependenceDisplay
-        PartialDependenceDisplay.from_estimator(model, df_filt.select_dtypes("number"), [top_feat], ax=ax)
+        PartialDependenceDisplay.from_estimator(
+            model, X, [top_feat], ax=ax
+        )
         ax.set_title(f"Partial Dependence: {top_feat}")
         st.pyplot(fig_pd)
 
