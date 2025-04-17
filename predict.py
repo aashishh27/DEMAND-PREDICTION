@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import pandas as pd
 import joblib
@@ -17,7 +16,7 @@ def load_assets():
 
 df, model = load_assets()
 
-# 2) Forecast function (cached) — note the leading underscore on `model`
+# 2) Forecast function (cached) — includes lat/lon in output
 @st.cache_data(show_spinner=False)
 def forecast_2025(df, _model):
     results = []
@@ -53,11 +52,15 @@ def forecast_2025(df, _model):
             Xp = pd.DataFrame([feat])[_model.feature_names_in_]
             pred = _model.predict(Xp)[0]
 
+            # ✅ append prediction with coordinates
             results.append({
                 "pickup_date": date,
                 "region": reg,
-                "predicted_pickups": pred
+                "predicted_pickups": pred,
+                "latitude": feat["latitude"],
+                "longitude": feat["longitude"]
             })
+
             daily.at[date] = pred
 
     return pd.DataFrame(results)
@@ -73,7 +76,7 @@ selected_regions = st.sidebar.multiselect(
 )
 start_date, end_date = st.sidebar.date_input(
     "Date range", 
-    value=(pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")),
+    value=(pd.to_datetime("2025-01-01"), pd.to_datetime("2025-05-16")),
     min_value=pd.to_datetime("2025-01-01"),
     max_value=pd.to_datetime("2025-12-31")
 )
