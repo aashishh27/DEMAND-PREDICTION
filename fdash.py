@@ -58,16 +58,22 @@ def generate_2025(df, model):
     last = hist.pickup_date.max()
     future = pd.MultiIndex.from_product(
         [hist.region.unique(),
-         pd.date_range(last+pd.Timedelta(days=1),
-                       "2025-12-31",freq="D")],
+         pd.date_range(last+pd.Timedelta(days=1),"2025-12-31",freq="D")],
         names=["region","pickup_date"]
     ).to_frame(index=False)
     future["daily_pickups"] = np.nan
-    all_days = pd.concat([hist,future], ignore_index=True)
+    all_days = pd.concat([hist, future], ignore_index=True)
     all_days = make_features(all_days, df)
-    Xf = all_days.loc[all_days.pickup_date > last].drop("daily_pickups", axis=1)
-    Xf = Xf[model.feature_names_in_]
-    all_days.loc[all_days.pickup_date > last, "predicted_daily"] = model.predict(Xf)
+
+    # build Xf for prediction
+    mask_future = all_days.pickup_date > last
+    Xf = all_days.loc[mask_future].drop("daily_pickups", axis=1)
+
+    # only reindex if feature_names_in_ exists
+    if hasattr(model, "feature_names_in_"):
+        Xf = Xf[model.feature_names_in_]
+
+    all_days.loc[mask_future, "predicted_daily"] = model.predict(Xf)
     return all_days
 
 # ─── RAG / Chatbot via FAISS ─────────────────────────────────────────────────────
@@ -143,7 +149,7 @@ with tabs[0]:
     all_days = generate_2025(df, model)
     preds    = all_days.query("pickup_date.dt.year==2025 & region in @sel_regs")
 
-    # Time series
+    # Time series chart
     fig_ts = px.line(
         preds, x="pickup_date", y="predicted_daily", color="region",
         title="Daily Predicted Quantity (2025)"
@@ -152,13 +158,16 @@ with tabs[0]:
     st.plotly_chart(fig_ts, use_container_width=True)
 
     # Geospatial clusters
-    agg = (preds.groupby("region")
-                .agg({"predicted_daily":"sum"})
-                .reset_index()
-                .merge(df.groupby("region")[["latitude","longitude"]].mean().reset_index(),
-                       on="region"))
+    agg = (
+        preds.groupby("region")
+             .agg({"predicted_daily":"sum"})
+             .reset_index()
+             .merge(
+                 df.groupby("region")[["latitude","longitude"]].mean().reset_index(),
+                 on="region"
+              )
+    )
     st.subheader("🔍 Aggregate 2025 Demand Clusters")
-
     view = pdk.ViewState(latitude=53.5461, longitude=-113.4938, zoom=10, pitch=45)
     hex_layer = pdk.Layer(
         "HexagonLayer", data=agg,
@@ -241,12 +250,14 @@ with tabs[4]:
     if img_paths:
         for img in img_paths:
             fname = os.path.basename(img)
-            title = caption_map.get(fname,
-                                   fname.replace(".png","").replace("_"," ").title())
+            title = caption_map.get(
+                fname,
+                fname.replace(".png","").replace("_"," ").title()
+            )
             st.subheader(title)
             st.image(img, use_column_width=True)
     else:
-        st.warning("No SHAP images found in `shap_images/`. Please add shap1.png…shap7.png.")
+        st.warning("No SHAP images found in `shap_images/`. Add shap1.png…shap7.png.")
 
 # ── Tab 5: Geospatial (History) ─────────────────────────────────────────────────
 with tabs[5]:
@@ -321,7 +332,4 @@ with tabs[7]:
     elif q:
         st.info("Chatbot is disabled (missing API key).")
 
-        st.markdown(f"**Answer:** {res}")
-    elif q:
-        st.info("Chatbot is disabled (missing API key).")
 
