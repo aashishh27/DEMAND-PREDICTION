@@ -1,0 +1,18 @@
+Data Dictionary for region_client_df (1).csv
+
+Columns:
+- region: Categorical region code (string)
+- pickup_date: Date of food‑hamper pickup (YYYY‑MM‑DD)
+- quantity: Number of hampers picked up (int)
+- dependents_qty: Number of dependents in the household (int)
+- household: Household type code (0.0=Single,1.0=Multi)
+- revisit: 0 for first‑time clients, 1 for returning
+- latitude, longitude: Geocoordinates of the pickup region (float)
+- [plus any other numeric features used in modeling]
+
+Engineered Features (in code):
+- lag_1: previous day’s quantity
+- roll_7, roll_14, roll_30: rolling mean of quantity over past 7/14/30 days (excluding current day)
+- dow: day‑of‑week (0=Mon…6=Sun)
+- month: month number (1–12)
+- med_dep: median dependents per region (static)
