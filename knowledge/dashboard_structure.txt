@@ -1,0 +1,30 @@
+Streamlit Dashboard Structure
+
+Tabs (in priority order):
+1. 2025 Forecast & Map
+   - Daily line chart of predicted_qty for each region in 2025.
+   - HexagonLayer elevation map showing aggregate 2025 demand clusters.
+
+2. Overview & KPIs
+   - Historical demand sum over selected period.
+   - Gauge indicator for demand momentum vs previous period.
+
+3. Features
+   - Bar chart of top 10 feature importances.
+   - Scatter-matrix for top 3 features.
+
+4. Model Comparison
+   - CV vs Test RMSE bar charts for RF and XGBoost.
+
+5. XAI
+   - SHAP summary plot.
+   - Partial dependence plot for most impactful feature.
+
+6. Geospatial (History)
+   - Hexagon and scatter maps of historical pickup locations.
+
+7. Optimization Playground
+   - Vehicle routing solver with user-defined vehicles and capacity.
+
+8. Chatbot
+   - RetrievalQA interface powered by FAISS.
