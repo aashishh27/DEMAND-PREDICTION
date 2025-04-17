@@ -2,12 +2,13 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import pydeck as pdk
 
 # 1) Load & cache data + model
 @st.cache_data
 def load_assets():
     df = pd.read_csv(
-        "region_client_df.csv",
+        "region_client_df (1).csv",
         parse_dates=["pickup_date", "first_visit_date"]
     )
     df = df.sort_values(["region", "pickup_date"]).reset_index(drop=True)
@@ -60,26 +61,47 @@ def forecast_2025(df, model):
 # 3) Streamlit UI
 st.title("🔮 2025 Forecast with Trend & Map")
 
+# Sidebar filters
+st.sidebar.header("Filters")
+all_regions = list(df.region.unique())
+selected_regions = st.sidebar.multiselect(
+    "Select region(s)", all_regions, default=all_regions
+)
+start_date, end_date = st.sidebar.date_input(
+    "Date range", 
+    value=(pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")),
+    min_value=pd.to_datetime("2025-01-01"),
+    max_value=pd.to_datetime("2025-12-31")
+)
+
 if st.button("Run 2025 Forecast"):
     with st.spinner("Generating forecasts…"):
         preds_2025 = forecast_2025(df, model)
     st.success("Forecast complete!")
 
+    # Apply filters
+    filt = (
+        preds_2025["region"].isin(selected_regions) &
+        (preds_2025["pickup_date"] >= pd.to_datetime(start_date)) &
+        (preds_2025["pickup_date"] <= pd.to_datetime(end_date))
+    )
+    filtered = preds_2025[filt]
+
     # --- Trend line chart: total daily pickups ---
     daily_totals = (
-        preds_2025
+        filtered
         .groupby("pickup_date")["predicted_pickups"]
         .sum()
         .rename("Total Pickups")
         .reset_index()
         .set_index("pickup_date")
     )
-    st.subheader("📈 Daily Total Pickups for 2025")
+    st.subheader("📈 Daily Total Pickups for 2025 (Filtered)")
     st.line_chart(daily_totals)
 
     # --- Map: total 2025 pickups by region centroid ---
     centroids = (
-        preds_2025
+        filtered
         .groupby("region")
         .agg({
             "latitude": "first",
@@ -94,9 +116,7 @@ if st.button("Run 2025 Forecast"):
         "predicted_pickups": "total_2025_pickups"
     })
 
-    st.subheader("🗺️ Map of Total 2025 Pickups by Region")
-    # st.map will size all points equally; to show magnitude, we can use pydeck:
-    import pydeck as pdk
+    st.subheader("🗺️ Map of Total 2025 Pickups by Region (Filtered)")
     deck = pdk.Deck(
         map_style="mapbox://styles/mapbox/light-v9",
         initial_view_state=pdk.ViewState(
@@ -117,3 +137,4 @@ if st.button("Run 2025 Forecast"):
         ]
     )
     st.pydeck_chart(deck)
+
