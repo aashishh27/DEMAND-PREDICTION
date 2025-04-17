@@ -10,7 +10,7 @@ import shap
 import matplotlib.pyplot as plt
 from sklearn.inspection import PartialDependenceDisplay
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
-from shap.common import InvalidModelError
+
 
 # LangChain RAG imports
 from langchain_community.embeddings import OpenAIEmbeddings
@@ -34,14 +34,14 @@ def load_model(path="optimized_random_forest.pkl"):
 @st.cache_resource
 def get_shap_explainer(model, X_ref):
     """
-    Return a SHAP explainer for `model`.  If it isn’t a supported tree model,
-    fall back to KernelExplainer using X_ref as background data.
+    Try to use TreeExplainer; if it fails (e.g. model isn’t a tree),
+    fall back to KernelExplainer using X_ref (numeric features) as background.
     """
     try:
         return shap.TreeExplainer(model)
-    except InvalidModelError:
-        # sample 100 rows (or fewer) from numeric features as background
-        bg = shap.sample(X_ref, min(len(X_ref), 100), random_state=0)
+    except Exception:
+        # shap.utils.sample works to grab a subset for KernelExplainer
+        bg = shap.utils.sample(X_ref, min(len(X_ref), 100), random_state=0)
         return shap.KernelExplainer(model.predict, bg)
         
 @st.cache_resource
@@ -129,7 +129,7 @@ hist_filt = df[mask]
 
 # ─── Compute SHAP ───────────────────────────────────────────────────────────────
 
-X_num    = hist_filt.select_dtypes(include=[np.number])
+X_num     = hist_filt.select_dtypes(include=[np.number])
 explainer = get_shap_explainer(model, X_num)
 shap_vals = explainer.shap_values(X_num)
 
