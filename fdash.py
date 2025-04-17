@@ -97,7 +97,6 @@ def generate_2025(df, model):
 # ─── Load ───────────────────────────────────────────────────────────────────────
 df        = load_data()
 model     = load_model()
-explainer = get_tree_explainer(model)
 qa_chain  = init_rag()
 
 # ─── Sidebar ────────────────────────────────────────────────────────────────────
@@ -128,9 +127,8 @@ mask = (
 hist_filt = df[mask]
 
 # ─── Compute SHAP ───────────────────────────────────────────────────────────────
-
 X_num     = hist_filt.select_dtypes(include=[np.number])
-explainer = get_shap_explainer(model, X_num)
+explainer = get_shap_explainer(model, X_num)      
 shap_vals = explainer.shap_values(X_num)
 
 
