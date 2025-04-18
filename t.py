@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import folium
-from streamlit_folium import st_folium
 
 # Page setup
 st.set_page_config(page_title="📊 Demand Prediction Studio", layout="wide")
@@ -11,45 +9,35 @@ st.title("📦 Food Hamper Demand – Forecast & EDA Insights")
 # ─── Data Loading ─────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    # Forecast data
-    forecast = pd.read_csv('forecast_2025_rf.csv', parse_dates=['pickup_date'])
-    forecast['pickup_date'] = forecast['pickup_date'].dt.normalize()
-    # Add week/month for grouping
-    forecast['week'] = forecast['pickup_date'].dt.to_period('W').apply(lambda r: r.start_time)
-    forecast['month'] = forecast['pickup_date'].dt.to_period('M').apply(lambda r: r.start_time)
-    return forecast
+    df = pd.read_csv('forecast_2025_rf.csv', parse_dates=['pickup_date'])
+    df['pickup_date'] = df['pickup_date'].dt.normalize()
+    df['week'] = df['pickup_date'].dt.to_period('W').apply(lambda r: r.start_time)
+    df['month'] = df['pickup_date'].dt.to_period('M').apply(lambda r: r.start_time)
+    return df
 
 # Load data
-forecast_df = load_data()
+df = load_data()
 
 # ─── Sidebar Filters ───────────────────────────────────────────────────────
 st.sidebar.header("🔧 Filters & View Options")
-# Date range picker
-min_date = forecast_df['pickup_date'].min().date()
-max_date = forecast_df['pickup_date'].max().date()
+min_date, max_date = df['pickup_date'].min().date(), df['pickup_date'].max().date()
 date_range = st.sidebar.date_input(
     "Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
-# Granularity
 view_mode = st.sidebar.radio("View by", ["Daily", "Weekly", "Monthly"])
-# Regions
-regions = forecast_df['region'].unique().tolist()
+regions = df['region'].unique().tolist()
 selected_regions = st.sidebar.multiselect("Regions", regions, default=regions)
 
-# Filter forecast data based on inputs
-df_filt = forecast_df[
-    (forecast_df['pickup_date'] >= pd.to_datetime(date_range[0])) &
-    (forecast_df['pickup_date'] <= pd.to_datetime(date_range[1])) &
-    (forecast_df['region'].isin(selected_regions))
+# Apply filters
+df_filt = df[
+    (df['pickup_date'] >= pd.to_datetime(date_range[0])) &
+    (df['pickup_date'] <= pd.to_datetime(date_range[1])) &
+    (df['region'].isin(selected_regions))
 ]
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────
 tabs = st.tabs([
-    "📈 Forecast Trends",
-    "🗺️ Demand Map",
-    "📊 EDA Insights",
-    "🧠 Model Insights",
-    "🧪 Residuals",
-    "📤 SHAP"
+    "📈 Forecast Trends", "🗺️ Demand Map", "📊 EDA Insights",
+    "🧠 Model Insights", "🧪 Residuals", "📤 SHAP"
 ])
 
 # Tab 1: Forecast Trends
@@ -57,22 +45,16 @@ with tabs[0]:
     st.header("📈 Forecast Trends (2025)")
     if view_mode == "Daily":
         chart_df = df_filt.copy()
-        x_col = 'pickup_date'
-        y_col = 'predicted_daily'
+        x = 'pickup_date'
     elif view_mode == "Weekly":
         chart_df = df_filt.groupby(['week', 'region'])['predicted_daily'].sum().reset_index()
-        x_col = 'week'
-        y_col = 'predicted_daily'
+        x = 'week'
     else:
         chart_df = df_filt.groupby(['month', 'region'])['predicted_daily'].sum().reset_index()
-        x_col = 'month'
-        y_col = 'predicted_daily'
+        x = 'month'
     fig = px.line(
-        chart_df,
-        x=x_col,
-        y=y_col,
-        color='region',
-        labels={x_col: view_mode, y_col: 'Forecasted Pickups'},
+        chart_df, x=x, y='predicted_daily', color='region',
+        labels={x: view_mode, 'predicted_daily': 'Forecasted Pickups'},
         title=f"{view_mode} Forecasted Pickups per Region"
     )
     fig.update_layout(legend=dict(orientation="h", y=1.1, x=1))
@@ -81,49 +63,45 @@ with tabs[0]:
 # Tab 2: Demand Map
 with tabs[1]:
     st.header("🗺️ 2025 Average Forecast Map")
-    avg = df.groupby('region')['predicted_daily'].mean().reset_index().rename(columns={'predicted_daily':'avg_pickup'})
+    # Use filtered data to compute average
+    map_df = (
+        df_filt.groupby('region')['predicted_daily']
+        .mean().reset_index().rename(columns={'predicted_daily': 'avg_pickup'})
+    )
     coords = {
         'Central': [53.5461, -113.4938], 'North Edmonton': [53.6081, -113.5035],
         'Northeast': [53.5820, -113.4190], 'South Edmonton': [53.4690, -113.5102],
         'Southeast': [53.4955, -113.4100], 'Far South': [53.4080, -113.5095],
         'West Edmonton': [53.5444, -113.6426]
     }
-    # Prepare map DataFrame
-    map_df = avg.copy()
-    map_df['lat'] = map_df['region'].apply(lambda r: coords[r][0])
-    map_df['lon'] = map_df['region'].apply(lambda r: coords[r][1])
-    map_df['level'] = map_df['avg_pickup'].apply(lambda v: 'Low' if v<1.5 else 'Medium' if v<2.5 else 'High')
-    color_map = {'Low':'green','Medium':'orange','High':'red'}
+    map_df['lat'] = map_df['region'].map(lambda r: coords[r][0])
+    map_df['lon'] = map_df['region'].map(lambda r: coords[r][1])
+    map_df['level'] = map_df['avg_pickup'].apply(
+        lambda v: 'Low' if v < 1.5 else 'Medium' if v < 2.5 else 'High'
+    )
+    color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
     fig_map = px.scatter_mapbox(
         map_df, lat='lat', lon='lon', size='avg_pickup', color='level', hover_name='region',
         color_discrete_map=color_map, size_max=30, zoom=10, mapbox_style='open-street-map'
     )
-    fig_map.update_layout(margin={'l':0,'r':0,'t':0,'b':0})
+    fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0))
     st.plotly_chart(fig_map, use_container_width=True)
-    st.markdown("**Legend:** Red=High (≥2.5), Orange=Medium (1.5–2.5), Green=Low (<1.5)")
+    st.markdown(
+        "**Legend:** Red=High (>=2.5), Orange=Medium (1.5–2.5), Green=Low (<1.5)"
+    )
 
 # Tab 3: EDA Insights
 with tabs[2]:
     st.header("📊 EDA Insights & Problem Statement")
-    st.markdown("**Problem Statement:**  \n> Identify geographic areas in Edmonton with higher or lower food hamper demand to support Islamic Family’s outreach and mobile distribution planning.")
-    st.subheader("Key Findings from Initial Data Inspection")
     st.markdown(
-        "- **Clients dataset**: 25,505 rows, 44 columns; one record per unique client.  \n"
-        "- **Food Hampers dataset**: 16,605 rows, 39 columns; one record per pickup appointment.  \n"
-        "- **Primary client features**: `age`, `sex_new`, `dependents_qty`, `preferred_languages`.  \n"
-        "- **Geospatial variables**: `FSA`, `final_FSA`, `latitude`, `longitude`, `dist_to_hub_km`.  \n"
-        "- **Temporal and target**: `pickup_date`, `daily_pickups`, `target_pickup_count_14d`.  \n"
-        "- **Data quality notes**: Some missing ages/birthdates; address fields in JSON; empty emergency contact columns.  \n"
-        "- **Behavioral features** computed: `visit_count_90d`, `days_since_first_visit`."
+        "**Problem Statement:**  \n> Identify geographic areas in Edmonton with higher or lower food hamper demand to support Islamic Family’s outreach and mobile distribution planning."
     )
-    st.image('images/stats.png', caption='Stats of Clients')
-    st.image('images/dependents_dist.png', caption='Dependents Quantity Distribution')
-    st.image('images/lang_top10.png', caption='Top 10 Primary Languages')
-    st.image('images/revisit_dependents.png', caption='Revisit Rate by Dependents Group')
-    st.image('images/pickup_age_group.png', caption='Pickup Rate by Age Group')
-    st.image('images/revisit_flag.png', caption='Revisit Behavior (First vs Repeat)')
-   
-    
+    st.subheader("Key Findings From Data Inspection")
+    st.markdown(
+        "- Clients: 25,505 rows, 44 cols; Food Hampers: 16,605 rows, 39 cols.  \n"
+        "- Core features: age, sex_new, dependents_qty, preferred_languages, latitude, longitude, dist_to_hub_km, daily_pickups.  \n"
+        "- Behavioral: visit_count_90d, days_since_first_visit; Data Quality: missing ages/address JSON."
+    )
 
 # Tab 4: Model Insights
 with tabs[3]:
@@ -137,17 +115,17 @@ with tabs[3]:
 with tabs[4]:
     st.header("🧪 Residual Analysis")
     st.image('images/rf_interval.png', caption='Prediction Intervals – RF')
-    st.image('images/decomposition.png', caption='STL Decomposition – Trend/Season/Noise')
-    st.image('images/residual_hist.png', caption='Histogram of Residuals')
-    st.image('images/residual_fitted.png', caption='Residuals vs Fitted Predictions')
+    st.image('images/decomposition.png', caption='STL Decomposition')
+    st.image('images/residual_hist.png', caption='Residual Histogram')
+    st.image('images/residual_fitted.png', caption='Residuals vs Fitted')
 
-# Tab 6: SHAP
+# Tab 6: SHAP Interpretation
 with tabs[5]:
     st.header("📤 SHAP Interpretability")
-    st.image('images/shap4.png', caption='SHAP Interaction Effects')
-    st.markdown("**Key SHAP Insights:**  \n"
-                "+ **lag_1**: Previous day pickups strongly increase forecast.  \n"
-                "+ **days_since_first_visit**: Longer client history boosts pickup rate.  \n"
-                "+ **day_index**: Captures weekly patterns effectively.")
+    for img in ['shap1', 'shap2', 'shap4', 'shap5', 'shap6', 'shap7']:
+        st.image(f'shap/{img}.png')
+    st.markdown(
+        "**Insights:** lag_1 drives forecasts; days_since_first_visit boosts pickups; day_index captures weekly patterns."
+    )
 
 
