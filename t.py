@@ -241,7 +241,7 @@ with tabs[6]:
         "**Insights:** lag_1 drives forecasts; days_since_first_visit boosts pickups; day_index captures weekly patterns."
     )
 
- with tabs[7]:
+with tabs[7]:
     st.header("💬 Ask the Dashboard")
     if 'history' not in st.session_state: st.session_state.history=[]
     user_q=st.text_input('Your question:',key='chat')
