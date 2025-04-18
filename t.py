@@ -50,22 +50,42 @@ tabs = st.tabs([
 ])
 
 # Tab 1: Forecast Trends
+# Tab 1: Forecast Trends
 with tabs[0]:
     st.header("📈 Forecast Trends (2025)")
+    # Smoothing option for noisy daily lines
+    smooth = st.sidebar.checkbox("Apply 7-day smoothing", value=False, help="Smooth daily trends with a 7-day moving average")
+
     if view_mode == "Daily":
         data = df_filt.copy()
         x_col = 'pickup_date'
+        y_col = 'predicted_daily'
+        if smooth:
+            # aggregate by date & region then smooth
+            tmp = data.groupby(['pickup_date','region'])['predicted_daily'].sum().reset_index()
+            tmp['smoothed'] = tmp.groupby('region')['predicted_daily']\
+                .transform(lambda x: x.rolling(7, min_periods=1).mean())
+            data = tmp
+            y_col = 'smoothed'
     elif view_mode == "Weekly":
         data = df_filt.groupby(['week','region'])['predicted_daily'].sum().reset_index()
         x_col = 'week'
+        y_col = 'predicted_daily'
     else:
         data = df_filt.groupby(['month','region'])['predicted_daily'].sum().reset_index()
         x_col = 'month'
+        y_col = 'predicted_daily'
+
     fig = px.line(
-        data, x=x_col, y='predicted_daily', color='region',
-        labels={x_col: view_mode, 'predicted_daily': 'Forecasted Pickups'},
+        data,
+        x=x_col,
+        y=y_col,
+        color='region',
+        line_shape='spline' if smooth and view_mode=='Daily' else 'linear',
+        labels={x_col: view_mode, y_col: 'Forecasted Pickups'},
         title=f"{view_mode} Forecasted Pickups per Region"
     )
+    fig.update_traces(mode='lines')
     fig.update_layout(legend=dict(orientation="h", y=1.1, x=1))
     st.plotly_chart(fig, use_container_width=True)
 
