@@ -7,6 +7,12 @@ from streamlit_folium import st_folium
 import plotly.express as px
 import os  # needed for dynamic image loading
 import openai
+
+# ─── Configuration ─────────────────────────────────────────────────────────
+# Initialize OpenAI client (v1 interface)
+client = openai.OpenAI(
+    api_key=st.secrets.get("openai_api_key", "")
+)
 # Page setup
 st.set_page_config(page_title="📊 Demand Prediction Studio", layout="wide")
 st.title("📦 Food Hamper Demand – Forecast & EDA Insights")
