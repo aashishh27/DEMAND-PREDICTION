@@ -140,8 +140,8 @@ with tabs[2]:
     st.image('images/revisit_dependents.png', caption='Revisit Rate by Dependents Group')
     st.image('images/pickup_age_group.png', caption='Pickup Rate by Age Group')
     st.image('images/revisit_flag.png', caption='Revisit Behavior (First vs Repeat)')
-    st.image('images/collected_flag.png', caption='Client Collected Flag')
-    st.image('images/dependents_box.png', caption
+   
+    
 
 # Tab 4: Model Insights
 with tabs[3]:
