@@ -12,3 +12,5 @@ langchain-community
 openai
 chromadb==1.0.5
 duckdb
+folium
+streamlit_folium
