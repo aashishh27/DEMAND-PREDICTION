@@ -6,7 +6,7 @@ import folium
 from streamlit_folium import st_folium
 import plotly.express as px
 import os  # needed for dynamic image loading
-
+import openai
 # Page setup
 st.set_page_config(page_title="📊 Demand Prediction Studio", layout="wide")
 st.title("📦 Food Hamper Demand – Forecast & EDA Insights")
