@@ -62,7 +62,7 @@ with tabs[0]:
     
 # Tab 2: Demand Map
 with tabs[1]:
-    st.header("🗺️ 2025 Forecast Map ({})".format(view_mode))
+    st.header(f"🗺️ 2025 Forecast Map ({view_mode})")
     # Aggregate based on view_mode
     if view_mode == 'Daily':
         agg = df_filt.groupby('region')['predicted_daily'].mean().reset_index()
@@ -72,26 +72,48 @@ with tabs[1]:
     else:
         monthly = df_filt.groupby(['month','region'])['predicted_daily'].sum().reset_index()
         agg = monthly.groupby('region')['predicted_daily'].mean().reset_index()
-    agg = agg.rename(columns={'predicted_daily': 'avg_pickup'})
+    agg.columns = ['region', 'avg_pickup']
+
+    # Determine dynamic thresholds (33rd & 66th percentiles)
+    q1, q2 = np.percentile(agg['avg_pickup'], [33, 66])
+    def level(v):
+        if v < q1: return 'Low'
+        elif v < q2: return 'Medium'
+        else: return 'High'
+    agg['level'] = agg['avg_pickup'].apply(level)
+    color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
+
     coords = {
         'Central': [53.5461, -113.4938], 'North Edmonton': [53.6081, -113.5035],
         'Northeast': [53.5820, -113.4190], 'South Edmonton': [53.4690, -113.5102],
         'Southeast': [53.4955, -113.4100], 'Far South': [53.4080, -113.5095],
         'West Edmonton': [53.5444, -113.6426]
     }
-    # Prepare map data
-    map_df = agg.copy()
-    map_df['lat'] = map_df['region'].map(lambda r: coords[r][0])
-    map_df['lon'] = map_df['region'].map(lambda r: coords[r][1])
-    map_df['level'] = map_df['avg_pickup'].apply(lambda v: 'Low' if v < 1.5 else 'Medium' if v < 2.5 else 'High')
-    color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
-    fig_map = px.scatter_mapbox(
-        map_df, lat='lat', lon='lon', size='avg_pickup', color='level', hover_name='region',
-        color_discrete_map=color_map, size_max=30, zoom=10, mapbox_style='open-street-map'
-    )
-    fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0))
-    st.plotly_chart(fig_map, use_container_width=True)
-    st.markdown("**Legend:** Red=High (>=2.5 avg), Orange=Medium (1.5–2.5 avg), Green=Low (<1.5 avg)")
+
+    # Scale circle radii: max 20000 m
+    max_radius = 20000
+    max_val = agg['avg_pickup'].max()
+    agg['radius'] = agg['avg_pickup'] / max_val * max_radius
+    agg['area_km2'] = (pi * (agg['radius']/1000)**2).round(2)
+
+    # Build folium map
+    m = folium.Map(location=[53.5461, -113.4938], zoom_start=10)
+    for _, row in agg.iterrows():
+        loc = coords.get(row['region'])
+        if not loc: continue
+        folium.Circle(
+            location=loc,
+            radius=row['radius'],
+            color=color_map[row['level']],
+            fill=True, fill_color=color_map[row['level']], fill_opacity=0.5,
+            popup=(f"{row['region']}<br>Avg: {row['avg_pickup']:.2f}<br>"
+                   f"Level: {row['level']}<br>Area: {row['area_km2']} km²")
+        ).add_to(m)
+    st_folium(m, width=800)
+    st.markdown(
+        f"**Thresholds:** Low < {q1:.2f}, Medium < {q2:.2f}, High ≥ {q2:.2f}<br>"
+        f"**Area calculation:** Circle radius scaled to {max_radius/1000} km max corresponds to area coverage."
+    , unsafe_allow_html=True)
     
 # Tab 3: EDA Insights
 with tabs[2]:
