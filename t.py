@@ -126,7 +126,13 @@ with tabs[2]:
         "- Core features: age, sex_new, dependents_qty, preferred_languages, latitude, longitude, dist_to_hub_km, daily_pickups.  \n"
         "- Behavioral: visit_count_90d, days_since_first_visit; Data Quality: missing ages/address JSON."
     )
-
+        # Static EDA visuals
+    st.image('images/stats.png', caption='Stats of Clients')
+    st.image('images/dependents_dist.png', caption='Dependents Quantity Distribution')
+    st.image('images/lang_top10.png', caption='Top 10 Primary Languages')
+    st.image('images/revisit_dependents.png', caption='Revisit Rate by Dependents Group')
+    st.image('images/pickup_age_group.png', caption='Pickup Rate by Age Group')
+    st.image('images/revisit_flag.png', caption='Revisit Behavior (First vs Repeat)')
 # Tab 4: Model Insights
 with tabs[3]:
     st.header("🧠 Model Diagnostics")
