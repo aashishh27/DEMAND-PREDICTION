@@ -23,12 +23,20 @@ def simulate_forecast(df, model, holiday_dates):
     global_start = df['pickup_date'].min()
     future_dates = pd.date_range(start=start_date, end="2025-12-31")
 
+    # Precompute monthly averages for 'seasonal_scale'
+    df['pickup_month'] = df['pickup_date'].dt.month
+    month_avgs = df.groupby('pickup_month')['daily_pickups'].mean().rolling(2, min_periods=1).mean()
+    month_avgs = month_avgs / month_avgs.max()  # normalize to 0-1 scale
+
     for reg in tqdm(df['region'].unique(), desc="Forecasting Regions"):
         hist = df[df['region'] == reg].sort_values('pickup_date')
         daily = hist.set_index('pickup_date')['daily_pickups'].copy()
         first_visit = pd.to_datetime(hist['first_visit_date'].min())
 
         for d in future_dates:
+            last_90 = daily.loc[d - pd.Timedelta(90): d - pd.Timedelta(1)]
+            slope = np.polyfit(range(len(last_90)), last_90, 1)[0] if len(last_90) >= 30 else 0
+
             feat = {
                 'lag_1': daily.get(d - pd.Timedelta(1), 0.0),
                 'rolling_7d':  daily.loc[d - pd.Timedelta(7):d - pd.Timedelta(1)].mean(),
@@ -42,15 +50,23 @@ def simulate_forecast(df, model, holiday_dates):
                 'day_index': (d - global_start).days,
                 'is_holiday': int(d in holiday_dates),
                 'pre_holiday': int(d - pd.Timedelta(1) in holiday_dates),
-                'pickup_month': d.month
+                'monthly_trend': slope,
+                'seasonal_scale': month_avgs.get(d.month, 0),
             }
-            for m in range(2,13):  # One-hot encode months
+
+            for m in range(2, 13):  # One-hot encode months
                 feat[f"mon_{m}"] = 1 if d.month == m else 0
 
-            X = pd.DataFrame([feat])[features]
+            X = pd.DataFrame([feat])[features]  # Ensure same order
             pred = model.predict(X)[0]
-            results.append({'region': reg, 'pickup_date': d, 'predicted_daily': pred})
-            daily.at[d] = pred
+
+            results.append({
+                'region': reg,
+                'pickup_date': d,
+                'predicted_daily': pred
+            })
+
+            daily.at[d] = pred  # feedback loop for next day's features
 
     return pd.DataFrame(results)
 
