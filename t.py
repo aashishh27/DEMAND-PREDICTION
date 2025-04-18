@@ -38,9 +38,15 @@ df_filt = df[
 ]
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────
+# ─── Tabs Setup ───────────────────────────────────────────────────────────
 tabs = st.tabs([
-    "📈 Forecast Trends", "🗺️ Demand Map", "📊 EDA Insights",
-    "🧠 Model Insights", "🧪 Residuals", "📤 SHAP"
+    "📈 Forecast Trends",
+    "🗺️ Demand Map",
+    "📊 EDA Insights",
+    "📊 Model Comparison",
+    "🧠 Model Insights",
+    "🧪 Residuals",
+    "📤 SHAP"
 ])
 
 # Tab 1: Forecast Trends
@@ -63,7 +69,6 @@ with tabs[0]:
     fig.update_layout(legend=dict(orientation="h", y=1.1, x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# Tab 2: Demand Map
 # Tab 2: Demand Map
 with tabs[1]:
     st.header(f"🗺️ 2025 Forecast Map ({view_mode})")
@@ -151,8 +156,31 @@ with tabs[2]:
         "- Core features: age, sex_new, dependents_qty, preferred_languages, latitude, longitude, dist_to_hub_km, daily_pickups.  \n"
         "- Behavioral: visit_count_90d, days_since_first_visit; Data Quality: missing ages/address JSON."
     )
-# Tab 4: Model Insights
+# Tab 4: Model Comparison
 with tabs[3]:
+    st.header("📊 Model Comparison & RMSE Metrics")
+    st.markdown("**Why We Don’t Need Encoding or Normalization (Right Now):**")
+    st.markdown(
+        "All input features are numeric lagged or rolling counts.  \n"
+        "Tree-based models are scale-invariant, so encoding and normalization aren’t required for RF and XGB models."
+    )
+    st.subheader("Static Region‑level RMSEs")
+    rmse_static = pd.DataFrame({
+        'Model': ['Random Forest', 'XGBoost'],
+        'Region-level RMSE': [0.7695657763249005, 0.8783934389922908]
+    })
+    st.table(rmse_static)
+    st.subheader("Aggregated Daily RMSEs")
+    rmse_daily = pd.DataFrame({
+        'Model': ['Random Forest', 'XGBoost', 'SARIMAX', 'Prophet'],
+        'Daily RMSE': [102.6961924148502, 102.69619181108908, 104.56170104736358, 166.03155426794353]
+    })
+    st.table(rmse_daily)
+    st.markdown(
+        "**Note:** If categorical or scale-sensitive models are introduced, we’d incorporate encoding and scaling then."
+    )
+# Tab 4: Model Insights
+with tabs[4]:
     st.header("🧠 Model Diagnostics")
     st.image('images/feature_importance.png', caption='RF Feature Importance')
     st.image('images/acf.png', caption='ACF of Δ Daily Pickups')
@@ -160,7 +188,7 @@ with tabs[3]:
     st.image('images/sarima.png', caption='14-Day SARIMA Forecast')
 
 # Tab 5: Residuals
-with tabs[4]:
+with tabs[5]:
     st.header("🧪 Residual Analysis")
     st.image('images/rf_interval.png', caption='Prediction Intervals – RF')
     st.image('images/decomposition.png', caption='STL Decomposition')
@@ -168,7 +196,7 @@ with tabs[4]:
     st.image('images/residual_fitted.png', caption='Residuals vs Fitted')
 
 # Tab 6: SHAP Interpretation
-with tabs[5]:
+with tabs[6]:
     st.header("📤 SHAP Interpretability")
     st.image('images/shap4.png', caption='SHAP results')
 
