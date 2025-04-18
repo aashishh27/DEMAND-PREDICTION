@@ -240,6 +240,7 @@ with tabs[6]:
     st.markdown(
         "**Insights:** lag_1 drives forecasts; days_since_first_visit boosts pickups; day_index captures weekly patterns."
     )
+
 # Tab 8: Chatbot
 with tabs[7]:
     st.header("💬 Ask the Dashboard")
@@ -256,5 +257,5 @@ with tabs[7]:
             st.session_state.history.append({'role':'assistant','content':reply})
         except Exception as e:
             st.error(f"Chat API error: {e}")
-     for msg in st.session_state.history:
+    for msg in st.session_state.history:
         st.chat_message(msg['role']).write(msg['content'])
