@@ -146,8 +146,8 @@ with tabs[4]:
 # Tab 6: SHAP Interpretation
 with tabs[5]:
     st.header("📤 SHAP Interpretability")
-    for img in ['shap1', 'shap2', 'shap4', 'shap5', 'shap6', 'shap7']:
-        st.image(f'shap/{img}.png')
+    st.image('images/shap4.png', caption='SHAP results')
+
     st.markdown(
         "**Insights:** lag_1 drives forecasts; days_since_first_visit boosts pickups; day_index captures weekly patterns."
     )
