@@ -1,5 +1,9 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+from math import pi
+import folium
+from streamlit_folium import st_folium
 import plotly.express as px
 
 # Page setup
@@ -21,8 +25,7 @@ df = load_data()
 # ─── Sidebar Filters ───────────────────────────────────────────────────────
 st.sidebar.header("🔧 Filters & View Options")
 min_date, max_date = df['pickup_date'].min().date(), df['pickup_date'].max().date()
-date_range = st.sidebar.date_input(
-    "Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
+date_range = st.sidebar.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
 view_mode = st.sidebar.radio("View by", ["Daily", "Weekly", "Monthly"])
 regions = df['region'].unique().tolist()
 selected_regions = st.sidebar.multiselect("Regions", regions, default=regions)
@@ -44,22 +47,22 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("📈 Forecast Trends (2025)")
     if view_mode == "Daily":
-        chart_df = df_filt.copy()
-        x = 'pickup_date'
+        data = df_filt.copy()
+        x_col = 'pickup_date'
     elif view_mode == "Weekly":
-        chart_df = df_filt.groupby(['week', 'region'])['predicted_daily'].sum().reset_index()
-        x = 'week'
+        data = df_filt.groupby(['week','region'])['predicted_daily'].sum().reset_index()
+        x_col = 'week'
     else:
-        chart_df = df_filt.groupby(['month', 'region'])['predicted_daily'].sum().reset_index()
-        x = 'month'
+        data = df_filt.groupby(['month','region'])['predicted_daily'].sum().reset_index()
+        x_col = 'month'
     fig = px.line(
-        chart_df, x=x, y='predicted_daily', color='region',
-        labels={x: view_mode, 'predicted_daily': 'Forecasted Pickups'},
+        data, x=x_col, y='predicted_daily', color='region',
+        labels={x_col: view_mode, 'predicted_daily': 'Forecasted Pickups'},
         title=f"{view_mode} Forecasted Pickups per Region"
     )
     fig.update_layout(legend=dict(orientation="h", y=1.1, x=1))
     st.plotly_chart(fig, use_container_width=True)
-    
+
 # Tab 2: Demand Map
 with tabs[1]:
     st.header(f"🗺️ 2025 Forecast Map ({view_mode})")
@@ -114,7 +117,6 @@ with tabs[1]:
         f"**Thresholds:** Low < {q1:.2f}, Medium < {q2:.2f}, High ≥ {q2:.2f}<br>"
         f"**Area calculation:** Circle radius scaled to {max_radius/1000} km max corresponds to area coverage."
     , unsafe_allow_html=True)
-    
 # Tab 3: EDA Insights
 with tabs[2]:
     st.header("📊 EDA Insights & Problem Statement")
