@@ -39,7 +39,6 @@ df_filt = df[
 ]
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────
-# ─── Tabs Setup ───────────────────────────────────────────────────────────
 tabs = st.tabs([
     "📈 Forecast Trends",
     "🗺️ Demand Map",
@@ -47,7 +46,8 @@ tabs = st.tabs([
     "📊 Model Comparison",
     "🧠 Model Insights",
     "🧪 Residuals",
-    "📤 SHAP"
+    "📤 SHAP",
+    "💬 Chatbot"
 ])
 
 # Tab 1: Forecast Trends
@@ -240,5 +240,21 @@ with tabs[6]:
     st.markdown(
         "**Insights:** lag_1 drives forecasts; days_since_first_visit boosts pickups; day_index captures weekly patterns."
     )
-
+# Tab 8: Chatbot
+with tabs[7]:
+    st.header("💬 Ask the Dashboard")
+    if 'history' not in st.session_state:
+        st.session_state.history = []
+    user_input = st.text_input("Your question:", key='chat')
+    if user_input:
+        st.session_state.history.append({'role':'user','content':user_input})
+        try:
+            resp = openai.ChatCompletion.create(
+                model='gpt-4o-mini', messages=st.session_state.history
+            )
+            reply = resp.choices[0].message.content
+            st.session_state.history.append({'role':'assistant','content':reply})
+        except Exception as e:
+            st.error(f"Chat API error: {e}")
+    for msg in st.session_state.history:
 
