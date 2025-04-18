@@ -44,10 +44,35 @@ tabs = st.tabs([
     "🧪 Residuals",
     "📤 SHAP"
 ])
-
-# Tab 1: Forecast Trends
-# Tab 1: Forecast Trends
+# Tab 0: Overview & KPIs
 with tabs[0]:
+    st.header("🗂️ Overview & KPIs")
+    current_total = df_filt['predicted_daily'].sum()
+    period_days = (date_range[1] - date_range[0]).days + 1
+    prev_start = pd.to_datetime(date_range[0]) - timedelta(days=period_days)
+    prev_end = pd.to_datetime(date_range[0]) - timedelta(days=1)
+    df_prev = df[
+        (df['pickup_date'] >= prev_start) & (df['pickup_date'] <= prev_end) & (df['region'].isin(selected_regions))
+    ]
+    prev_total = df_prev['predicted_daily'].sum()
+    delta_pct = (current_total - prev_total) / prev_total if prev_total>0 else 0
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Forecasted Pickups", f"{current_total:,.0f}", delta=f"{delta_pct:+.1%}")
+    c2.metric("Average Daily Pickups", f"{df_filt['predicted_daily'].mean():.1f}")
+    c3.metric("Regions Selected", len(selected_regions))
+
+    gauge = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=current_total,
+        delta={'reference': prev_total, 'relative': True},
+        gauge={'axis': {'range': [0, max(current_total, prev_total)*1.2]}},
+        title={'text': "Demand Momentum"}
+    ))
+    st.plotly_chart(gauge, use_container_width=True)
+# Tab 1: Forecast Trends
+# Tab 1: Forecast Trends
+with tabs[1]:
     st.header("📈 Forecast Trends (2025)")
     # Smoothing option for noisy daily lines
     smooth = st.sidebar.checkbox("Apply 7-day smoothing", value=False, help="Smooth daily trends with a 7-day moving average")
@@ -86,7 +111,7 @@ with tabs[0]:
     st.plotly_chart(fig, use_container_width=True)
 
 # Tab 2: Demand Map
-with tabs[1]:
+with tabs[2]:
     st.header(f"🗺️ 2025 Forecast Map ({view_mode})")
     # Aggregate based on view_mode
     if view_mode == 'Daily':
@@ -135,7 +160,7 @@ with tabs[1]:
         f"**Area:** Circle radius sqrt-scaled, with max {max_radius/1000:.1f} km corresponding to largest value."
     , unsafe_allow_html=True)
 # Tab 3: EDA Insights
-with tabs[2]:
+with tabs[3]:
     st.header("📊 EDA Insights & Problem Statement")
     st.markdown(
         "**Problem Statement:**  \n> Identify geographic areas in Edmonton with higher or lower food hamper demand to support Islamic Family’s outreach and mobile distribution planning."
@@ -189,7 +214,7 @@ with tabs[2]:
         else:
             st.warning(f"EDA image not found: {img_path}")
 # Tab 4: Model Comparison
-with tabs[3]:
+with tabs[4]:
     st.header("📊 Model Comparison & RMSE Metrics")
     st.markdown("**Why We Don’t Need Encoding or Normalization (Right Now):**")
     st.markdown(
@@ -212,7 +237,7 @@ with tabs[3]:
         "**Note:** If categorical or scale-sensitive models are introduced, we’d incorporate encoding and scaling then."
     )
 # Tab 4: Model Insights
-with tabs[4]:
+with tabs[5]:
     st.header("🧠 Model Diagnostics")
     st.image('images/feature_importance.png', caption='RF Feature Importance')
     st.image('images/acf.png', caption='ACF of Δ Daily Pickups')
@@ -220,7 +245,7 @@ with tabs[4]:
     st.image('images/sarima.png', caption='14-Day SARIMA Forecast')
 
 # Tab 5: Residuals
-with tabs[5]:
+with tabs[6]:
     st.header("🧪 Residual Analysis")
     st.image('images/rf_interval.png', caption='Prediction Intervals – RF')
     st.image('images/decomposition.png', caption='STL Decomposition')
@@ -228,7 +253,7 @@ with tabs[5]:
     st.image('images/residual_fitted.png', caption='Residuals vs Fitted')
 
 # Tab 6: SHAP Interpretation
-with tabs[6]:
+with tabs[7]:
     st.header("📤 SHAP Interpretability")
     st.image('images/shap4.png', caption='SHAP results')
 
