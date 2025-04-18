@@ -6,7 +6,7 @@ from streamlit_folium import st_folium
 
 # Page setup
 st.set_page_config(page_title="📊 Demand Prediction Studio", layout="wide")
-st.title("📦 Food Hamper Demand – Forecast & Client Insights")
+st.title("📦 Food Hamper Demand – Forecast & EDA Insights")
 
 # ─── Data Loading ─────────────────────────────────────────────────────────
 @st.cache_data
@@ -22,8 +22,10 @@ def load_data():
         .rename(columns={'daily_pickups': 'actual_daily'}))
     # Align to 2025
     def safe_replace_year(dt):
-        try: return dt.replace(year=2025)
-        except: return pd.NaT
+        try:
+            return dt.replace(year=2025)
+        except:
+            return pd.NaT
     actual_daily['aligned_date'] = actual_daily['pickup_date'].apply(safe_replace_year)
     actual_daily = actual_daily.dropna(subset=['aligned_date'])
 
@@ -54,18 +56,13 @@ df_compare, forecast_df = load_data()
 
 # ─── Sidebar Filters ───────────────────────────────────────────────────────
 st.sidebar.header("🔧 Filters & View Options")
-# Date range
 min_date = df_compare['aligned_date'].min().date()
 max_date = df_compare['aligned_date'].max().date()
-date_range = st.sidebar.date_input("Date Range", [min_date, max_date],
-                                   min_value=min_date, max_value=max_date)
-# Granularity
+date_range = st.sidebar.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
 view_mode = st.sidebar.radio("View by", ["Daily", "Weekly", "Monthly"])
-# Regions
 regions = df_compare['region'].unique().tolist()
 selected_regions = st.sidebar.multiselect("Regions", regions, default=regions)
 
-# Apply filters
 df_filt = df_compare[
     (df_compare['aligned_date'] >= pd.to_datetime(date_range[0])) &
     (df_compare['aligned_date'] <= pd.to_datetime(date_range[1])) &
@@ -76,10 +73,10 @@ df_filt = df_compare[
 tabs = st.tabs([
     "📈 Forecast vs Actual",
     "🗺️ Demand Map",
+    "📊 EDA Insights",
     "🧠 Model Insights",
     "🧪 Residuals",
-    "📤 SHAP",
-    "👥 Client Insights"
+    "📤 SHAP"
 ])
 
 # Tab 1: Forecast vs Actual
@@ -114,61 +111,61 @@ with tabs[1]:
     m = folium.Map(location=[53.5461,-113.4938], zoom_start=10)
     for _,r in avg.iterrows():
         loc = coords.get(r['region'])
-        if loc: folium.CircleMarker(location=loc,
+        if loc:
+            folium.CircleMarker(location=loc,
                      radius=5+r['predicted_daily']*2,
                      color=color_map[r['level']],fill=True,fill_opacity=0.6,
                      popup=f"{r['region']}: {r['predicted_daily']:.1f} ({r['level']})").add_to(m)
     st_folium(m, width=800)
     with st.expander("Legend"):
-        st.markdown("- **Red**: High≥2.5  \n- **Orange**: 1.5–2.5  \n- **Green**: <1.5")
+        st.markdown("- **Red**: High ≥ 2.5  \n- **Orange**: 1.5–2.5  \n- **Green**: < 1.5")
 
-# Tab 3: Model Insights
+# Tab 3: EDA Insights
 with tabs[2]:
-    st.header("🧠 Model Diagnostics")
-    st.image('images/feature_importance.png', caption='RF Feature Importance')
-    st.image('images/acf.png', caption='ACF of Δ Daily Pickups')
-    st.image('images/pacf.png', caption='PACF of Δ Daily Pickups')
-    st.image('images/sarima.png', caption='14-Day SARIMA Forecast')
-
-# Tab 4: Residuals
-with tabs[3]:
-    st.header("🧪 Residual Analysis")
-    st.image('images/rf_interval.png', caption='Prediction Intervals – RF')
-    st.image('images/decomposition.png', caption='STL Decomposition – Trend/Season/Noise')
-    st.image('images/residual_hist.png', caption='Histogram of Residuals')
-    st.image('images/residual_fitted.png', caption='Residuals vs Fitted Predictions')
-
-# Tab 5: SHAP
-with tabs[4]:
-    st.header("📤 SHAP Interpretability")
-    st.markdown("**Key SHAP Insights:**")
+    st.header("📊 EDA Insights & Problem Statement")
+    st.markdown("**Problem Statement:**  \n> Identify geographic areas in Edmonton with higher or lower food hamper demand to support Islamic Family’s outreach and mobile distribution planning.")
+    st.subheader("Key Findings from Initial Data Inspection")
     st.markdown(
-        "- **lag_1** drives most predictions: higher previous-day pickups increase outlook.  "
-        "- **days_since_first_visit**: clients with longer histories tend to pick up more.  "
-        "- **day_index** captures intra-week patterns.  "
+        "- **Clients dataset**: 25,505 rows, 44 columns; one record per unique client.  \n"
+        "- **Food Hampers dataset**: 16,605 rows, 39 columns; one record per pickup appointment.  \n"
+        "- **Primary client features**: `age`, `sex_new`, `dependents_qty`, `preferred_languages`.  \n"
+        "- **Geospatial variables**: `FSA`, `final_FSA`, `latitude`, `longitude`, `dist_to_hub_km`.  \n"
+        "- **Temporal and target**: `pickup_date`, `daily_pickups`, `target_pickup_count_14d`.  \n"
+        "- **Data quality notes**: Some missing ages/birthdates; address fields in JSON; empty emergency contact columns.  \n"
+        "- **Behavioral features** computed: `visit_count_90d`, `days_since_first_visit`."
     )
-    shap_table = pd.DataFrame({
-        'Feature': ['lag_1', 'days_since_first_visit', 'day_index', 'dow_sin', 'dow_cos', 'is_holiday'],
-        'Mean |SHAP|':    [0.65,       0.09,                   0.05,         0.01,     0.005,      0.001]
-    })
-    st.table(shap_table)
-   
-
-# Tab 6: Client Insights
-with tabs[5]:
-    st.header("👥 Client Demographics & Insights")
-    st.image('images/age_dist.png', caption='Age Distribution of Clients')
+    st.image('images/stats.png', caption='Stats of Clients')
     st.image('images/dependents_dist.png', caption='Dependents Quantity Distribution')
     st.image('images/lang_top10.png', caption='Top 10 Primary Languages')
     st.image('images/revisit_dependents.png', caption='Revisit Rate by Dependents Group')
     st.image('images/pickup_age_group.png', caption='Pickup Rate by Age Group')
     st.image('images/revisit_flag.png', caption='Revisit Behavior (First vs Repeat)')
     st.image('images/collected_flag.png', caption='Client Collected Flag')
-    st.image('images/dependents_box.png', caption='Boxplot of Dependents Qty')
-    
-    st.subheader("🔗 Feature Correlation Heatmap")
-    num_cols = actual_df.select_dtypes(include='number').columns
-    corr = actual_df[num_cols].corr()
-    corr_fig = px.imshow(corr, text_auto=True, aspect='auto', title='Correlation Heatmap')
-    st.plotly_chart(corr_fig, use_container_width=True)
+    st.image('images/dependents_box.png', caption
+
+# Tab 4: Model Insights
+with tabs[3]:
+    st.header("🧠 Model Diagnostics")
+    st.image('images/feature_importance.png', caption='RF Feature Importance')
+    st.image('images/acf.png', caption='ACF of Δ Daily Pickups')
+    st.image('images/pacf.png', caption='PACF of Δ Daily Pickups')
+    st.image('images/sarima.png', caption='14-Day SARIMA Forecast')
+
+# Tab 5: Residuals
+with tabs[4]:
+    st.header("🧪 Residual Analysis")
+    st.image('images/rf_interval.png', caption='Prediction Intervals – RF')
+    st.image('images/decomposition.png', caption='STL Decomposition – Trend/Season/Noise')
+    st.image('images/residual_hist.png', caption='Histogram of Residuals')
+    st.image('images/residual_fitted.png', caption='Residuals vs Fitted Predictions')
+
+# Tab 6: SHAP
+with tabs[5]:
+    st.header("📤 SHAP Interpretability")
+    st.image('images/shap4.png', caption='SHAP Interaction Effects')
+    st.markdown("**Key SHAP Insights:**  \n"
+                "+ **lag_1**: Previous day pickups strongly increase forecast.  \n"
+                "+ **days_since_first_visit**: Longer client history boosts pickup rate.  \n"
+                "+ **day_index**: Captures weekly patterns effectively.")
+
 
