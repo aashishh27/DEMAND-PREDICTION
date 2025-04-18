@@ -34,7 +34,10 @@ regions = df["region"].unique().tolist()
 selected_regions = st.sidebar.multiselect("Select Regions", regions, default=regions)
 
 # ─── Filter Data Based on Inputs ────────────────────────────────────────
-df_filtered = df[(df["pickup_date"] >= date_range[0]) & (df["pickup_date"] <= date_range[1])]
+start_date = pd.to_datetime(date_range[0])
+end_date = pd.to_datetime(date_range[1])
+df_filtered = df[(df["pickup_date"] >= start_date) & (df["pickup_date"] <= end_date)]
+
 df_filtered = df_filtered[df_filtered["region"].isin(selected_regions)]
 
 # ─── Dynamic Chart ──────────────────────────────────────────────────────
