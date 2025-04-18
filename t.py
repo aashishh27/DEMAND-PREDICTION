@@ -256,5 +256,4 @@ with tabs[7]:
             st.session_state.history.append({'role':'assistant','content':reply})
         except Exception as e:
             st.error(f"Chat API error: {e}")
-    for msg in st.session_state.history:
-
+       for msg in st.session_state.history:
