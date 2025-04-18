@@ -11,67 +11,40 @@ st.title("📦 Food Hamper Demand – Forecast & EDA Insights")
 # ─── Data Loading ─────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    # Historical actuals
-    actual = pd.read_csv('region_client_df (1).csv', parse_dates=['pickup_date'])
-    actual['pickup_date'] = actual['pickup_date'].dt.normalize()
-    actual_2024 = actual[actual['pickup_date'].dt.year == 2024]
-    actual_daily = (actual_2024
-        .groupby(['pickup_date', 'region'])['daily_pickups']
-        .sum()
-        .reset_index()
-        .rename(columns={'daily_pickups': 'actual_daily'}))
-    # Align to 2025
-    def safe_replace_year(dt):
-        try:
-            return dt.replace(year=2025)
-        except:
-            return pd.NaT
-    actual_daily['aligned_date'] = actual_daily['pickup_date'].apply(safe_replace_year)
-    actual_daily = actual_daily.dropna(subset=['aligned_date'])
-
     # Forecast data
     forecast = pd.read_csv('forecast_2025_rf.csv', parse_dates=['pickup_date'])
     forecast['pickup_date'] = forecast['pickup_date'].dt.normalize()
-    forecast_daily = (forecast
-        .groupby(['pickup_date', 'region'])['predicted_daily']
-        .sum()
-        .reset_index())
-    forecast_daily['aligned_date'] = forecast_daily['pickup_date']
-
-    # Merge for comparison
-    df_compare = pd.merge(forecast_daily, actual_daily,
-                          on=['aligned_date', 'region'], how='inner')
-    df_compare = df_compare.rename(columns={
-        'pickup_date_x': 'forecast_date',
-        'pickup_date_y': 'actual_date'
-    })
-    # Add aggregates
-    df_compare['week'] = df_compare['aligned_date'].dt.to_period('W').apply(lambda r: r.start_time)
-    df_compare['month'] = df_compare['aligned_date'].dt.to_period('M').apply(lambda r: r.start_time)
-
-    return df_compare, forecast
+    # Add week/month for grouping
+    forecast['week'] = forecast['pickup_date'].dt.to_period('W').apply(lambda r: r.start_time)
+    forecast['month'] = forecast['pickup_date'].dt.to_period('M').apply(lambda r: r.start_time)
+    return forecast
 
 # Load data
-df_compare, forecast_df = load_data()
+forecast_df = load_data()
 
 # ─── Sidebar Filters ───────────────────────────────────────────────────────
 st.sidebar.header("🔧 Filters & View Options")
-min_date = df_compare['aligned_date'].min().date()
-max_date = df_compare['aligned_date'].max().date()
-date_range = st.sidebar.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
+# Date range picker
+min_date = forecast_df['pickup_date'].min().date()
+max_date = forecast_df['pickup_date'].max().date()
+date_range = st.sidebar.date_input(
+    "Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
+# Granularity
 view_mode = st.sidebar.radio("View by", ["Daily", "Weekly", "Monthly"])
-regions = df_compare['region'].unique().tolist()
+# Regions
+regions = forecast_df['region'].unique().tolist()
 selected_regions = st.sidebar.multiselect("Regions", regions, default=regions)
 
-df_filt = df_compare[
-    (df_compare['aligned_date'] >= pd.to_datetime(date_range[0])) &
-    (df_compare['aligned_date'] <= pd.to_datetime(date_range[1])) &
-    (df_compare['region'].isin(selected_regions))
+# Filter forecast data based on inputs
+df_filt = forecast_df[
+    (forecast_df['pickup_date'] >= pd.to_datetime(date_range[0])) &
+    (forecast_df['pickup_date'] <= pd.to_datetime(date_range[1])) &
+    (forecast_df['region'].isin(selected_regions))
 ]
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────
 tabs = st.tabs([
-    "📈 Forecast vs Actual",
+    "📈 Forecast Trends",
     "🗺️ Demand Map",
     "📊 EDA Insights",
     "🧠 Model Insights",
@@ -79,19 +52,29 @@ tabs = st.tabs([
     "📤 SHAP"
 ])
 
-# Tab 1: Forecast vs Actual
+# Tab 1: Forecast Trends
 with tabs[0]:
-    st.header("📈 Forecast vs 2024 Actuals")
+    st.header("📈 Forecast Trends (2025)")
     if view_mode == "Daily":
-        chart_df = df_filt.copy(); x_col = 'aligned_date'
+        chart_df = df_filt.copy()
+        x_col = 'pickup_date'
+        y_col = 'predicted_daily'
     elif view_mode == "Weekly":
-        chart_df = df_filt.groupby(['week','region'])[['actual_daily','predicted_daily']].sum().reset_index(); x_col = 'week'
+        chart_df = df_filt.groupby(['week', 'region'])['predicted_daily'].sum().reset_index()
+        x_col = 'week'
+        y_col = 'predicted_daily'
     else:
-        chart_df = df_filt.groupby(['month','region'])[['actual_daily','predicted_daily']].sum().reset_index(); x_col = 'month'
-    fig = px.line(chart_df, x=x_col,
-                  y=['actual_daily','predicted_daily'], color='region',
-                  labels={'actual_daily':'Actual','predicted_daily':'Forecast'},
-                  title=f"{view_mode} Forecast vs Actual by Region")
+        chart_df = df_filt.groupby(['month', 'region'])['predicted_daily'].sum().reset_index()
+        x_col = 'month'
+        y_col = 'predicted_daily'
+    fig = px.line(
+        chart_df,
+        x=x_col,
+        y=y_col,
+        color='region',
+        labels={x_col: view_mode, y_col: 'Forecasted Pickups'},
+        title=f"{view_mode} Forecasted Pickups per Region"
+    )
     fig.update_layout(legend=dict(orientation="h", y=1.1, x=1))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -99,26 +82,48 @@ with tabs[0]:
 with tabs[1]:
     st.header("🗺️ 2025 Forecast Map")
     avg = forecast_df.groupby('region')['predicted_daily'].mean().reset_index()
-    def cat(x): return 'Low' if x<1.5 else 'Medium' if x<2.5 else 'High'
-    avg['level'] = avg['predicted_daily'].apply(cat)
-    color_map = {'Low':'green','Medium':'orange','High':'red'}
+    # Categorize demand levels
+    def categorize(val):
+        if val < 1.5:
+            return 'Low'
+        elif val < 2.5:
+            return 'Medium'
+        else:
+            return 'High'
+    avg['level'] = avg['predicted_daily'].apply(categorize)
+    # Color and size settings
+    color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
     coords = {
-        'Central':[53.5461,-113.4938],'North Edmonton':[53.6081,-113.5035],
-        'Northeast':[53.5820,-113.4190],'South Edmonton':[53.4690,-113.5102],
-        'Southeast':[53.4955,-113.4100],'Far South':[53.4080,-113.5095],
-        'West Edmonton':[53.5444,-113.6426]
+        'Central': [53.5461, -113.4938],
+        'North Edmonton': [53.6081, -113.5035],
+        'Northeast': [53.5820, -113.4190],
+        'South Edmonton': [53.4690, -113.5102],
+        'Southeast': [53.4955, -113.4100],
+        'Far South': [53.4080, -113.5095],
+        'West Edmonton': [53.5444, -113.6426],
     }
-    m = folium.Map(location=[53.5461,-113.4938], zoom_start=10)
-    for _,r in avg.iterrows():
-        loc = coords.get(r['region'])
-        if loc:
-            folium.CircleMarker(location=loc,
-                     radius=5+r['predicted_daily']*2,
-                     color=color_map[r['level']],fill=True,fill_opacity=0.6,
-                     popup=f"{r['region']}: {r['predicted_daily']:.1f} ({r['level']})").add_to(m)
+    m = folium.Map(location=[53.5461, -113.4938], zoom_start=10)
+    for _, row in avg.iterrows():
+        loc = coords.get(row['region'])
+        if not loc:
+            continue
+        folium.CircleMarker(
+            location=loc,
+            radius=5 + row['predicted_daily'] * 2,
+            color='black',             # border color
+            fill=True,
+            fill_color=color_map[row['level']],  # fill color
+            fill_opacity=0.7,
+            popup=f"{row['region']}: {row['predicted_daily']:.2f} avg pickups ({row['level']})"
+        ).add_to(m)
     st_folium(m, width=800)
     with st.expander("Legend"):
-        st.markdown("- **Red**: High ≥ 2.5  \n- **Orange**: 1.5–2.5  \n- **Green**: < 1.5")
+        st.markdown(
+            "- **Red**: High (>=2.5 avg)  \n"
+            "- **Orange**: Medium (1.5–2.5 avg)  \n"
+            "- **Green**: Low (<1.5 avg)"
+        )
+
 
 # Tab 3: EDA Insights
 with tabs[2]:
