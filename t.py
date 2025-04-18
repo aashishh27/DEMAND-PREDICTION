@@ -176,6 +176,22 @@ with tabs[2]:
         "- Core features: age, sex_new, dependents_qty, preferred_languages, latitude, longitude, dist_to_hub_km, daily_pickups.  \n"
         "- Behavioral: visit_count_90d, days_since_first_visit; Data Quality: missing ages/address JSON."
     )
+        # Static EDA visuals
+    eda_images = [
+        ('images/stats.png', 'Stats of Clients'),
+        ('images/dependents.png', 'Dependents Quantity Distribution'),
+        ('images/lang_top10.png', 'Top 10 Primary Languages'),
+        ('images/revisit_dependants.png', 'Revisit Rate by Dependents Group'),
+        ('images/pickup_age_group.png', 'Pickup Rate by Age Group')
+    ]
+    for img_path, caption in eda_images:
+        if os.path.exists(img_path):
+            try:
+                st.image(img_path, caption=caption)
+            except Exception as e:
+                st.warning(f"Error loading {img_path}: {e}")
+        else:
+            st.warning(f"EDA image not found: {img_path}")
 # Tab 4: Model Comparison
 with tabs[3]:
     st.header("📊 Model Comparison & RMSE Metrics")
