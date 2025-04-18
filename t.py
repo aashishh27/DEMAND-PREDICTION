@@ -126,13 +126,24 @@ with tabs[2]:
         "- Core features: age, sex_new, dependents_qty, preferred_languages, latitude, longitude, dist_to_hub_km, daily_pickups.  \n"
         "- Behavioral: visit_count_90d, days_since_first_visit; Data Quality: missing ages/address JSON."
     )
-        # Static EDA visuals
-    st.image('images/stats.png', caption='Stats of Clients')
-    st.image('images/dependents_dist.png', caption='Dependents Quantity Distribution')
-    st.image('images/lang_top10.png', caption='Top 10 Primary Languages')
-    st.image('images/revisit_dependents.png', caption='Revisit Rate by Dependents Group')
-    st.image('images/pickup_age_group.png', caption='Pickup Rate by Age Group')
-    st.image('images/revisit_flag.png', caption='Revisit Behavior (First vs Repeat)')
+    # Dynamic load EDA images from images folder
+    eda_dir = 'images'
+    eda_prefixes = ['stats', 'dependents_dist', 'lang_top10', 'revisit_dependents', 'pickup_age_group', 'revisit_flag']
+    if os.path.isdir(eda_dir):
+        eda_files = sorted([f for f in os.listdir(eda_dir)
+                            if f.lower().endswith(('.png', '.jpg', '.jpeg'))
+                            and any(f.lower().startswith(prefix) for prefix in eda_prefixes)])
+        if eda_files:
+            for img in eda_files:
+                path = os.path.join(eda_dir, img)
+                try:
+                    st.image(path, caption=img)
+                except Exception as e:
+                    st.warning(f"Could not load EDA image {img}: {e}")
+        else:
+            st.info("No EDA images found in 'images' matching expected prefixes.")
+    else:
+        st.warning("Images folder 'images' not found. Please add your EDA visuals there.")
 # Tab 4: Model Insights
 with tabs[3]:
     st.header("🧠 Model Diagnostics")
