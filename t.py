@@ -42,8 +42,7 @@ tabs = st.tabs([
     "📊 Model Comparison",
     "🧠 Model Insights",
     "🧪 Residuals",
-    "📤 SHAP",
-    "💬 Chatbot"
+    "📤 SHAP"
 ])
 
 # Tab 1: Forecast Trends
