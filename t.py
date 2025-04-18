@@ -5,6 +5,7 @@ from math import pi
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
+import os  # needed for dynamic image loading
 
 # Page setup
 st.set_page_config(page_title="📊 Demand Prediction Studio", layout="wide")
