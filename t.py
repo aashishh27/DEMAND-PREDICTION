@@ -59,26 +59,31 @@ with tabs[0]:
     )
     fig.update_layout(legend=dict(orientation="h", y=1.1, x=1))
     st.plotly_chart(fig, use_container_width=True)
-
+    
 # Tab 2: Demand Map
 with tabs[1]:
-    st.header("🗺️ 2025 Average Forecast Map")
-    # Use filtered data to compute average
-    map_df = (
-        df_filt.groupby('region')['predicted_daily']
-        .mean().reset_index().rename(columns={'predicted_daily': 'avg_pickup'})
-    )
+    st.header("🗺️ 2025 Forecast Map ({})".format(view_mode))
+    # Aggregate based on view_mode
+    if view_mode == 'Daily':
+        agg = df_filt.groupby('region')['predicted_daily'].mean().reset_index()
+    elif view_mode == 'Weekly':
+        weekly = df_filt.groupby(['week','region'])['predicted_daily'].sum().reset_index()
+        agg = weekly.groupby('region')['predicted_daily'].mean().reset_index()
+    else:
+        monthly = df_filt.groupby(['month','region'])['predicted_daily'].sum().reset_index()
+        agg = monthly.groupby('region')['predicted_daily'].mean().reset_index()
+    agg = agg.rename(columns={'predicted_daily': 'avg_pickup'})
     coords = {
         'Central': [53.5461, -113.4938], 'North Edmonton': [53.6081, -113.5035],
         'Northeast': [53.5820, -113.4190], 'South Edmonton': [53.4690, -113.5102],
         'Southeast': [53.4955, -113.4100], 'Far South': [53.4080, -113.5095],
         'West Edmonton': [53.5444, -113.6426]
     }
+    # Prepare map data
+    map_df = agg.copy()
     map_df['lat'] = map_df['region'].map(lambda r: coords[r][0])
     map_df['lon'] = map_df['region'].map(lambda r: coords[r][1])
-    map_df['level'] = map_df['avg_pickup'].apply(
-        lambda v: 'Low' if v < 1.5 else 'Medium' if v < 2.5 else 'High'
-    )
+    map_df['level'] = map_df['avg_pickup'].apply(lambda v: 'Low' if v < 1.5 else 'Medium' if v < 2.5 else 'High')
     color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
     fig_map = px.scatter_mapbox(
         map_df, lat='lat', lon='lon', size='avg_pickup', color='level', hover_name='region',
@@ -86,10 +91,8 @@ with tabs[1]:
     )
     fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0))
     st.plotly_chart(fig_map, use_container_width=True)
-    st.markdown(
-        "**Legend:** Red=High (>=2.5), Orange=Medium (1.5–2.5), Green=Low (<1.5)"
-    )
-
+    st.markdown("**Legend:** Red=High (>=2.5 avg), Orange=Medium (1.5–2.5 avg), Green=Low (<1.5 avg)")
+    
 # Tab 3: EDA Insights
 with tabs[2]:
     st.header("📊 EDA Insights & Problem Statement")
