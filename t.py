@@ -257,3 +257,4 @@ with tabs[7]:
         except Exception as e:
             st.error(f"Chat API error: {e}")
        for msg in st.session_state.history:
+           st.chat_message(msg['role']).write(msg['content'])
