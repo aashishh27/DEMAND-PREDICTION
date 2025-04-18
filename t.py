@@ -80,50 +80,27 @@ with tabs[0]:
 
 # Tab 2: Demand Map
 with tabs[1]:
-    st.header("🗺️ 2025 Forecast Map")
-    avg = forecast_df.groupby('region')['predicted_daily'].mean().reset_index()
-    # Categorize demand levels
-    def categorize(val):
-        if val < 1.5:
-            return 'Low'
-        elif val < 2.5:
-            return 'Medium'
-        else:
-            return 'High'
-    avg['level'] = avg['predicted_daily'].apply(categorize)
-    # Color and size settings
-    color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
+    st.header("🗺️ 2025 Average Forecast Map")
+    avg = df.groupby('region')['predicted_daily'].mean().reset_index().rename(columns={'predicted_daily':'avg_pickup'})
     coords = {
-        'Central': [53.5461, -113.4938],
-        'North Edmonton': [53.6081, -113.5035],
-        'Northeast': [53.5820, -113.4190],
-        'South Edmonton': [53.4690, -113.5102],
-        'Southeast': [53.4955, -113.4100],
-        'Far South': [53.4080, -113.5095],
-        'West Edmonton': [53.5444, -113.6426],
+        'Central': [53.5461, -113.4938], 'North Edmonton': [53.6081, -113.5035],
+        'Northeast': [53.5820, -113.4190], 'South Edmonton': [53.4690, -113.5102],
+        'Southeast': [53.4955, -113.4100], 'Far South': [53.4080, -113.5095],
+        'West Edmonton': [53.5444, -113.6426]
     }
-    m = folium.Map(location=[53.5461, -113.4938], zoom_start=10)
-    for _, row in avg.iterrows():
-        loc = coords.get(row['region'])
-        if not loc:
-            continue
-        folium.CircleMarker(
-            location=loc,
-            radius=5 + row['predicted_daily'] * 2,
-            color='black',             # border color
-            fill=True,
-            fill_color=color_map[row['level']],  # fill color
-            fill_opacity=0.7,
-            popup=f"{row['region']}: {row['predicted_daily']:.2f} avg pickups ({row['level']})"
-        ).add_to(m)
-    st_folium(m, width=800)
-    with st.expander("Legend"):
-        st.markdown(
-            "- **Red**: High (>=2.5 avg)  \n"
-            "- **Orange**: Medium (1.5–2.5 avg)  \n"
-            "- **Green**: Low (<1.5 avg)"
-        )
-
+    # Prepare map DataFrame
+    map_df = avg.copy()
+    map_df['lat'] = map_df['region'].apply(lambda r: coords[r][0])
+    map_df['lon'] = map_df['region'].apply(lambda r: coords[r][1])
+    map_df['level'] = map_df['avg_pickup'].apply(lambda v: 'Low' if v<1.5 else 'Medium' if v<2.5 else 'High')
+    color_map = {'Low':'green','Medium':'orange','High':'red'}
+    fig_map = px.scatter_mapbox(
+        map_df, lat='lat', lon='lon', size='avg_pickup', color='level', hover_name='region',
+        color_discrete_map=color_map, size_max=30, zoom=10, mapbox_style='open-street-map'
+    )
+    fig_map.update_layout(margin={'l':0,'r':0,'t':0,'b':0})
+    st.plotly_chart(fig_map, use_container_width=True)
+    st.markdown("**Legend:** Red=High (≥2.5), Orange=Medium (1.5–2.5), Green=Low (<1.5)")
 
 # Tab 3: EDA Insights
 with tabs[2]:
