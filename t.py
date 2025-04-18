@@ -64,6 +64,7 @@ with tabs[0]:
     st.plotly_chart(fig, use_container_width=True)
 
 # Tab 2: Demand Map
+# Tab 2: Demand Map
 with tabs[1]:
     st.header(f"🗺️ 2025 Forecast Map ({view_mode})")
     # Aggregate based on view_mode
@@ -77,13 +78,9 @@ with tabs[1]:
         agg = monthly.groupby('region')['predicted_daily'].mean().reset_index()
     agg.columns = ['region', 'avg_pickup']
 
-    # Determine dynamic thresholds (33rd & 66th percentiles)
+    # Dynamic thresholds based on percentiles
     q1, q2 = np.percentile(agg['avg_pickup'], [33, 66])
-    def level(v):
-        if v < q1: return 'Low'
-        elif v < q2: return 'Medium'
-        else: return 'High'
-    agg['level'] = agg['avg_pickup'].apply(level)
+    agg['level'] = agg['avg_pickup'].apply(lambda v: 'Low' if v < q1 else 'Medium' if v < q2 else 'High')
     color_map = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
 
     coords = {
@@ -93,13 +90,12 @@ with tabs[1]:
         'West Edmonton': [53.5444, -113.6426]
     }
 
-    # Scale circle radii: max 20000 m
-    max_radius = 20000
+    # Scale circle radii with square-root scaling, max 5000 m
+    max_radius = 5000
     max_val = agg['avg_pickup'].max()
-    agg['radius'] = agg['avg_pickup'] / max_val * max_radius
+    agg['radius'] = np.sqrt(agg['avg_pickup'] / max_val) * max_radius
     agg['area_km2'] = (pi * (agg['radius']/1000)**2).round(2)
 
-    # Build folium map
     m = folium.Map(location=[53.5461, -113.4938], zoom_start=10)
     for _, row in agg.iterrows():
         loc = coords.get(row['region'])
@@ -115,8 +111,9 @@ with tabs[1]:
     st_folium(m, width=800)
     st.markdown(
         f"**Thresholds:** Low < {q1:.2f}, Medium < {q2:.2f}, High ≥ {q2:.2f}<br>"
-        f"**Area calculation:** Circle radius scaled to {max_radius/1000} km max corresponds to area coverage."
+        f"**Area:** Circle radius sqrt-scaled, with max {max_radius/1000:.1f} km corresponding to largest value."
     , unsafe_allow_html=True)
+
 # Tab 3: EDA Insights
 with tabs[2]:
     st.header("📊 EDA Insights & Problem Statement")
