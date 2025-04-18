@@ -241,21 +241,18 @@ with tabs[6]:
         "**Insights:** lag_1 drives forecasts; days_since_first_visit boosts pickups; day_index captures weekly patterns."
     )
 
-# Tab 8: Chatbot
-with tabs[7]:
+ with tabs[7]:
     st.header("💬 Ask the Dashboard")
-    if 'history' not in st.session_state:
-        st.session_state.history = []
-    user_input = st.text_input("Your question:", key='chat')
-    if user_input:
-        st.session_state.history.append({'role':'user','content':user_input})
+    if 'history' not in st.session_state: st.session_state.history=[]
+    user_q=st.text_input('Your question:',key='chat')
+    if user_q:
+        st.session_state.history.append({'role':'user','content':user_q})
         try:
-            resp = openai.ChatCompletion.create(
+            resp = openai.chat.completions.create(
                 model='gpt-4o-mini', messages=st.session_state.history
             )
             reply = resp.choices[0].message.content
             st.session_state.history.append({'role':'assistant','content':reply})
         except Exception as e:
             st.error(f"Chat API error: {e}")
-    for msg in st.session_state.history:
-        st.chat_message(msg['role']).write(msg['content'])
+    for msg in st.session_state.history: st.chat_message(msg['role']).write(msg['content'])
