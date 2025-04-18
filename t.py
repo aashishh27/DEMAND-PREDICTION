@@ -113,36 +113,44 @@ with tabs[1]:
         f"**Thresholds:** Low < {q1:.2f}, Medium < {q2:.2f}, High ≥ {q2:.2f}<br>"
         f"**Area:** Circle radius sqrt-scaled, with max {max_radius/1000:.1f} km corresponding to largest value."
     , unsafe_allow_html=True)
-
 # Tab 3: EDA Insights
 with tabs[2]:
     st.header("📊 EDA Insights & Problem Statement")
     st.markdown(
         "**Problem Statement:**  \n> Identify geographic areas in Edmonton with higher or lower food hamper demand to support Islamic Family’s outreach and mobile distribution planning."
     )
+    # Additional Data Overview
+    st.subheader("Data Overview & Summary Statistics")
+    st.markdown(
+        f"- Total forecast records: {len(df)}  \n"
+        f"- Date range: {min_date} to {max_date}  \n"
+        f"- Regions covered: {len(regions)}  \n"
+    )
+    summary = df.groupby('region')['predicted_daily'].agg(
+        Total='sum', Average='mean', Minimum='min', Maximum='max'
+    ).round(2).reset_index()
+    st.dataframe(summary, use_container_width=True)
+    # Heatmap: Monthly average forecasted pickups per region
+    st.subheader("📈 Monthly Avg Forecast Heatmap")
+    # Prepare pivot table
+    heat_df = df.groupby([df['pickup_date'].dt.to_period('M').apply(lambda r: r.start_time), 'region'])['predicted_daily']\
+        .mean().round(2).reset_index()
+    heat_pivot = heat_df.pivot(index='region', columns='pickup_date', values='predicted_daily')
+    fig_heat = px.imshow(
+        heat_pivot,
+        labels=dict(x='Month', y='Region', color='Avg Pickups'),
+        x=heat_pivot.columns,
+        y=heat_pivot.index,
+        aspect='auto',
+        title='Monthly Avg Forecasted Pickups Heatmap'
+    )
+    fig_heat.update_xaxes(tickangle=45)
+    st.plotly_chart(fig_heat, use_container_width=True)
     st.subheader("Key Findings From Data Inspection")
     st.markdown(
-        "- Clients: 25,505 rows, 44 cols; Food Hampers: 16,605 rows, 39 cols.  \n"
         "- Core features: age, sex_new, dependents_qty, preferred_languages, latitude, longitude, dist_to_hub_km, daily_pickups.  \n"
         "- Behavioral: visit_count_90d, days_since_first_visit; Data Quality: missing ages/address JSON."
     )
-       # Safely load EDA visuals
-    eda_images = [
-        ('images/stats.png','Stats of Clients'),
-        ('images/dependents_dist.png','Dependents Quantity Distribution'),
-        ('images/lang_top10.png','Top 10 Primary Languages'),
-        ('images/revisit_dependents.png','Revisit Rate by Dependents Group'),
-        ('images/pickup_age_group.png','Pickup Rate by Age Group'),
-        ('images/revisit_flag.png','Revisit Behavior (First vs Repeat)')
-    ]
-    for img_path, caption in eda_images:
-        if os.path.exists(img_path):
-            try:
-                st.image(img_path, caption=caption)
-            except Exception as e:
-                st.warning(f"Error loading {img_path}: {e}")
-        else:
-            st.warning(f"EDA image not found: {img_path}")
 # Tab 4: Model Insights
 with tabs[3]:
     st.header("🧠 Model Diagnostics")
